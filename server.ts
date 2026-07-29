@@ -2,7 +2,6 @@ import express from 'express';
 import path from 'path';
 import cors from 'cors';
 import fs from 'fs';
-import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
 
@@ -16,7 +15,6 @@ async function startServer() {
   app.use(cors());
   app.use(express.json());
 
-  // 👈 قراءة المنفذ وتحويله لرقم صريح لـ Cloud Run
   const PORT = Number(process.env.PORT) || 8080;
 
   // Initialize Gemini AI Client lazily/safely
@@ -214,7 +212,7 @@ Respond ONLY with valid JSON conforming to the requested schema.`;
   // 1.1 Legacy Route
   app.post('/api/gemini/chat', async (req, res) => {
     try {
-      const { message, lang = 'ar' } = req.body;
+      const { message } = req.body;
       if (!message) return res.status(400).json({ error: 'Message is required' });
 
       const ai = getGeminiClient();
@@ -236,7 +234,7 @@ Respond ONLY with valid JSON conforming to the requested schema.`;
   // 1.5 Translate Route
   app.post('/api/translate', async (req, res) => {
     try {
-      const { text, sourceLang = 'auto', targetLang = 'ar' } = req.body;
+      const { text, targetLang = 'ar' } = req.body;
       if (!text || !text.trim()) return res.status(400).json({ error: 'Text required' });
 
       const ai = getGeminiClient();
@@ -247,7 +245,7 @@ Respond ONLY with valid JSON conforming to the requested schema.`;
         contents: [{ role: 'user', parts: [{ text: `Translate to ${targetLang}: ${text}` }] }],
       });
 
-      return res.json({ translatedText: (response.text || text).trim(), sourceLang, targetLang });
+      return res.json({ translatedText: (response.text || text).trim(), targetLang });
     } catch (err: any) {
       return res.status(500).json({ error: 'Failed to translate', details: err.message });
     }
@@ -259,11 +257,13 @@ Respond ONLY with valid JSON conforming to the requested schema.`;
   app.post('/api/whatsapp/connect', (req, res) => res.json({ success: true }));
   app.post('/api/payments/subscribe', (req, res) => res.json({ success: true }));
 
-  // 👈 التحقق التلقائي من وجود مجلد dist لمنع تشغيل Vite Dev Server بالخطأ في Cloud Run
+  // Serve static UI or Vite dev middleware
   const distPath = path.join(currentDir, 'dist');
   const isProduction = process.env.NODE_ENV === 'production' || fs.existsSync(distPath);
 
   if (!isProduction) {
+    // 👈 استيراد ديناميكي لمنع تحميل Vite في بيئة الإنتاج Cloud Run
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
@@ -276,7 +276,6 @@ Respond ONLY with valid JSON conforming to the requested schema.`;
     });
   }
 
-  // 👈 ربط السيرفر بالمنفذ والـ Host المناسب لـ Cloud Run
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Arafat Platform Full-Stack Server running on port ${PORT}`);
   });
