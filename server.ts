@@ -11,7 +11,9 @@ const currentDir = process.cwd();
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  
+  // 👈 القراءة المباشرة من متغير البيئة الخاص بـ Cloud Run
+  const PORT = process.env.PORT || 8080;
 
   app.use(express.json());
 
@@ -209,7 +211,7 @@ Respond ONLY with valid JSON conforming to the requested schema.`;
       parts.push({ text: promptText });
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.6-flash',
+        model: 'gemini-2.5-flash', // 👈 تعديل اسم النموذج إلى الأصدار المعتمد
         contents: [{ role: 'user', parts }],
         config: {
           systemInstruction,
@@ -285,7 +287,7 @@ Respond ONLY with valid JSON conforming to the requested schema.`;
       ];
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.6-flash',
+        model: 'gemini-2.5-flash',
         contents: formattedContents,
         config: {
           systemInstruction,
@@ -316,7 +318,6 @@ Respond ONLY with valid JSON conforming to the requested schema.`;
       const ai = getGeminiClient();
 
       if (!ai) {
-        // Fallback simulated translation if API key is not present
         return res.json({
           translatedText: text,
           sourceLang,
@@ -333,7 +334,7 @@ Text to Translate: "${text}"
 Provide ONLY the clean translated text without any explanation, quotes, or markdown wrappers.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.6-flash',
+        model: 'gemini-2.5-flash',
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: {
           temperature: 0.2,
@@ -433,8 +434,9 @@ Provide ONLY the clean translated text without any explanation, quotes, or markd
     });
   }
 
+  // 👈 ربط السيرفر بالمنفذ الديناميكي والـ Host المناسب لـ Cloud Run
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Arafat Platform Full-Stack Server running on http://0.0.0.0:${PORT}`);
+    console.log(`Arafat Platform Full-Stack Server running on port ${PORT}`);
   });
 }
 
