@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { type NextFunction, type Request, type Response } from 'express';
 import path from 'path';
 import cors from 'cors';
 import fs from 'fs';
@@ -9,145 +9,244 @@ dotenv.config();
 
 const currentDir = process.cwd();
 
-async function startServer() {
+type ProposedAction = {
+  actionType: string;
+  payload: Record<string, unknown>;
+  summary: string;
+};
+
+type GeminiStructuredResponse = {
+  message?: string;
+  intent?: string;
+  requiresConfirmation?: boolean;
+  proposedAction?: ProposedAction | null;
+  suggestedReplies?: string[];
+};
+
+async function startServer(): Promise<void> {
   const app = express();
-  
-  app.use(cors());
-  app.use(express.json());
 
   const PORT = Number(process.env.PORT) || 8080;
 
-  // Initialize Gemini AI Client lazily/safely
-  const getGeminiClient = () => {
+  app.disable('x-powered-by');
+
+  app.use(
+    cors({
+      origin: true,
+      methods: ['GET', 'POST', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization'],
+    }),
+  );
+
+  app.use(express.json({ limit: '12mb' }));
+
+  const getGeminiClient = (): GoogleGenAI | null => {
     const apiKey = process.env.GEMINI_API_KEY;
+
     if (!apiKey) {
-      console.warn('GEMINI_API_KEY is not defined. Falling back to default assistant responses.');
+      console.warn(
+        'GEMINI_API_KEY is not defined. Falling back to default assistant responses.',
+      );
       return null;
     }
+
     return new GoogleGenAI({
-      apiKey: apiKey,
+      apiKey,
       httpOptions: {
         headers: {
-          'User-Agent': 'aistudio-build',
+          'User-Agent': 'arafat-platform',
         },
       },
     });
   };
 
   // ==========================================
-  // API Routes
+  // Health Check
   // ==========================================
 
-  // Health check
-  app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', service: 'Arafat Platform Backend' });
+  app.get('/api/health', (_req: Request, res: Response) => {
+    return res.status(200).json({
+      status: 'ok',
+      service: 'Arafat Platform Backend',
+      timestamp: new Date().toISOString(),
+    });
   });
 
-  // 1. 🤖 وكيل عرفات الذكي (Main Arafat Agent Endpoint)
-  app.post('/api/ai/chat', async (req, res) => {
+  // ==========================================
+  // Main Arafat AI Agent
+  // ==========================================
+
+  app.post('/api/ai/chat', async (req: Request, res: Response) => {
+    const conversationId =
+      typeof req.body?.conversationId === 'string' &&
+      req.body.conversationId.trim()
+        ? req.body.conversationId.trim()
+        : `conv_${Date.now()}`;
+
     try {
       const {
         message,
-        conversationId = `conv_${Date.now()}`,
         language = 'ar',
         currency = 'SAR',
         userContext = {},
         image = null,
-      } = req.body;
+      } = req.body ?? {};
 
-      if ((!message || typeof message !== 'string' || !message.trim()) && !image) {
+      const hasValidMessage =
+        typeof message === 'string' && message.trim().length > 0;
+
+      if (!hasValidMessage && !image) {
         return res.status(400).json({
           success: false,
+          conversationId,
           error: 'الرسالة أو الصورة مطلوبة لتنفيذ الاستجابة',
         });
       }
 
-      const userText = (message || '').trim() || 'الرجاء تحليل هذه الصورة الملتقطة بالكاميرا وإفادتي بالإرشادات المناسبة.';
+      const userText = hasValidMessage
+        ? message.trim()
+        : 'الرجاء تحليل هذه الصورة الملتقطة بالكاميرا وإفادتي بالإرشادات المناسبة.';
 
       if (userText.length > 2000) {
         return res.status(400).json({
           success: false,
+          conversationId,
           error: 'عذراً، يتجاوز طول الرسالة الحد المسموح به.',
         });
       }
 
+      const selectedLanguage =
+        typeof language === 'string' ? language : 'ar';
+
+      const selectedCurrency =
+        typeof currency === 'string' ? currency : 'SAR';
+
       const ai = getGeminiClient();
 
       if (!ai) {
-        const isAr = language === 'ar';
+        const isArabic = selectedLanguage === 'ar';
+
         let fallbackIntent = 'general_question';
         let requiresConfirmation = false;
-        let proposedAction = null;
+        let proposedAction: ProposedAction | null = null;
         let fallbackText = '';
 
         if (image) {
           fallbackIntent = 'ritual_guidance';
-          fallbackText = isAr
-            ? `تم تحليل الصورة الملتقطة بنجاح. يتعرّف نظام عرفات الرؤية البصرية الذكية على العناصر المحيطة بك.`
-            : `Image successfully analyzed. Arafat AI Vision recognizes the environment around you.`;
-        } else if (userText.includes('فندق') || userText.includes('حجز') || userText.includes('فنادق')) {
+
+          fallbackText = isArabic
+            ? 'تم استقبال الصورة بنجاح. يمكنني مساعدتك في فهم ما يظهر فيها وتقديم إرشادات مناسبة.'
+            : 'The image was received successfully. I can help explain what appears in it and provide suitable guidance.';
+        } else if (
+          userText.includes('فندق') ||
+          userText.includes('حجز') ||
+          userText.includes('فنادق')
+        ) {
           fallbackIntent = 'hotel_search';
           requiresConfirmation = true;
+
           proposedAction = {
             actionType: 'REQUEST_HOTEL_BOOKING',
             payload: {
               city: 'مكة المكرمة',
               nights: 3,
               guests: 2,
-              budget: `1,200 ${currency}`,
+              budget: `1,200 ${selectedCurrency}`,
             },
-            summary: 'حجز فندق قاطن في مكة المكرمة قبالة الحرم الشريف لمدة 3 ليالٍ',
+            summary:
+              'طلب البحث عن فندق في مكة المكرمة لمدة 3 ليالٍ',
           };
-          fallbackText = isAr
-            ? `السلام عليكم ورحمة الله وبركاته. أنا عرفات رفيقك الذكي. بخصوص طلبك حول "${userText}"، أستطيع إرشادك بدقة خطوة بخطوة.`
-            : `Welcome Pilgrim! Regarding "${userText}", I can guide you step-by-step.`;
+
+          fallbackText = isArabic
+            ? `السلام عليكم ورحمة الله وبركاته. بخصوص طلبك: "${userText}"، أستطيع مساعدتك في البحث عن فندق مناسب خطوة بخطوة.`
+            : `Welcome. Regarding your request: "${userText}", I can help you find a suitable hotel step by step.`;
         } else {
-          fallbackText = isAr
-            ? `السلام عليكم ورحمة الله وبركاته. أنا عرفات رفيقك الذكي. بخصوص طلبك حول "${userText}"، أستطيع إرشادك بدقة.`
-            : `Welcome Pilgrim! Regarding your request "${userText}", I can guide you step-by-step.`;
+          fallbackText = isArabic
+            ? `السلام عليكم ورحمة الله وبركاته. أنا عرفات، رفيقك الذكي. بخصوص طلبك: "${userText}"، أستطيع إرشادك بدقة.`
+            : `Welcome. I am Arafat, your intelligent companion. Regarding your request: "${userText}", I can guide you clearly.`;
         }
 
-        return res.json({
+        return res.status(200).json({
           success: true,
           conversationId,
           message: fallbackText,
           intent: fallbackIntent,
           requiresConfirmation,
           proposedAction,
-          suggestedReplies: isAr
-            ? ['اشرح لي العمرة خطوة بخطوة', 'التقط صورة معلم آخر', 'احسب ميزانيتي', 'أبحث عن فندق']
-            : ['Explain Umrah steps', 'Scan another landmark', 'Calculate budget', 'Find hotel'],
+          suggestedReplies: isArabic
+            ? [
+                'اشرح لي العمرة خطوة بخطوة',
+                'احسب ميزانيتي',
+                'ابحث عن فندق',
+                'أرشدني إلى مكان',
+              ]
+            : [
+                'Explain Umrah step by step',
+                'Calculate my budget',
+                'Find a hotel',
+                'Guide me to a place',
+              ],
         });
       }
 
       const systemInstruction = `
-أنت عرفات، الرفيق الإيماني والوكيل الذكي لضيوف الرحمن، والمزود بخصائص التعرف البصري والصوتي المتقدمة.
-مهمتك مساعدة الحجاج والمعتمرين في التخطيط للرحلة، وفهم المناسك، والوصول إلى الأماكن.
-تحدث بأسلوب مهذب، هادئ، وقور، واضح ومطمئن.
+أنت عرفات، الرفيق الإيماني والوكيل الذكي لضيوف الرحمن.
+مهمتك مساعدة الحجاج والمعتمرين في التخطيط للرحلة، وفهم المناسك، والوصول إلى الأماكن، وتنظيم الطلبات الخدمية.
+تحدث بأسلوب مهذب وهادئ ووقور وواضح ومطمئن.
+لا تدّعِ تنفيذ حجز أو دفع أو إجراء فعلي قبل تأكيد المستخدم.
+أعد الاستجابة بصيغة JSON صحيحة فقط.
 `;
 
-      const promptText = `User Context: ${JSON.stringify(userContext)}
-User Message: "${userText}"
-Language: ${language}
-Currency: ${currency}
+      const promptText = `
+User Context:
+${JSON.stringify(userContext)}
 
-Respond ONLY with valid JSON conforming to the requested schema.`;
+User Message:
+${userText}
 
-      const parts: any[] = [];
+Language:
+${selectedLanguage}
+
+Currency:
+${selectedCurrency}
+
+Return valid JSON with exactly these fields:
+{
+  "message": "string",
+  "intent": "string",
+  "requiresConfirmation": true,
+  "proposedAction": null,
+  "suggestedReplies": ["string"]
+}
+`;
+
+      const parts: Array<Record<string, unknown>> = [];
+
       if (image) {
         let base64Data = '';
         let mimeType = 'image/jpeg';
+
         if (typeof image === 'string') {
-          const match = image.match(/^data:(image\/\w+);base64,(.+)$/);
+          const match = image.match(
+            /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/,
+          );
+
           if (match) {
             mimeType = match[1];
             base64Data = match[2];
           } else {
             base64Data = image;
           }
-        } else if (image.data) {
+        } else if (
+          typeof image === 'object' &&
+          image !== null &&
+          typeof image.data === 'string'
+        ) {
           base64Data = image.data;
-          if (image.mimeType) mimeType = image.mimeType;
+
+          if (typeof image.mimeType === 'string') {
+            mimeType = image.mimeType;
+          }
         }
 
         if (base64Data) {
@@ -160,11 +259,18 @@ Respond ONLY with valid JSON conforming to the requested schema.`;
         }
       }
 
-      parts.push({ text: promptText });
+      parts.push({
+        text: promptText,
+      });
 
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
-        contents: [{ role: 'user', parts }],
+        contents: [
+          {
+            role: 'user',
+            parts,
+          },
+        ],
         config: {
           systemInstruction,
           temperature: 0.3,
@@ -172,35 +278,53 @@ Respond ONLY with valid JSON conforming to the requested schema.`;
         },
       });
 
-      const rawJson = response.text || '{}';
-      let parsedResponse: any = {};
+      const rawText = response.text?.trim() || '{}';
+
+      let parsedResponse: GeminiStructuredResponse;
+
       try {
-        parsedResponse = JSON.parse(rawJson);
-      } catch (e) {
+        parsedResponse = JSON.parse(rawText) as GeminiStructuredResponse;
+      } catch {
         parsedResponse = {
-          message: response.text || 'أهلاً بك في منصة عرفات، يسعدني خدمتك.',
+          message:
+            response.text ||
+            'أهلاً بك في منصة عرفات، كيف أستطيع خدمتك اليوم؟',
           intent: 'general_question',
           requiresConfirmation: false,
           proposedAction: null,
-          suggestedReplies: ['صمّم رحلتي', 'احسب ميزانيتي', 'مناسك العمرة'],
+          suggestedReplies: [
+            'صمّم رحلتي',
+            'احسب ميزانيتي',
+            'مناسك العمرة',
+          ],
         };
       }
 
-      return res.json({
+      return res.status(200).json({
         success: true,
         conversationId,
-        message: parsedResponse.message || 'أهلاً بك في منصة عرفات، كيف أستطيع خدمتك اليوم؟',
+        message:
+          parsedResponse.message ||
+          'أهلاً بك في منصة عرفات، كيف أستطيع خدمتك اليوم؟',
         intent: parsedResponse.intent || 'general_question',
-        requiresConfirmation: Boolean(parsedResponse.requiresConfirmation),
+        requiresConfirmation: Boolean(
+          parsedResponse.requiresConfirmation,
+        ),
         proposedAction: parsedResponse.proposedAction || null,
-        suggestedReplies: parsedResponse.suggestedReplies || [],
+        suggestedReplies: Array.isArray(
+          parsedResponse.suggestedReplies,
+        )
+          ? parsedResponse.suggestedReplies
+          : [],
       });
-    } catch (err: any) {
-      console.error('Error in /api/ai/chat:', err);
+    } catch (error) {
+      console.error('Error in /api/ai/chat:', error);
+
       return res.status(500).json({
         success: false,
-        conversationId: req.body.conversationId || `conv_${Date.now()}`,
-        message: 'نعتذر، حدثت صعوبة مؤقتة في التواصل مع الوكيل الذكي.',
+        conversationId,
+        message:
+          'نعتذر، حدثت صعوبة مؤقتة في التواصل مع الوكيل الذكي.',
         intent: 'unknown',
         requiresConfirmation: false,
         proposedAction: null,
@@ -209,76 +333,228 @@ Respond ONLY with valid JSON conforming to the requested schema.`;
     }
   });
 
-  // 1.1 Legacy Route
-  app.post('/api/gemini/chat', async (req, res) => {
+  // ==========================================
+  // Legacy Gemini Chat
+  // ==========================================
+
+  app.post('/api/gemini/chat', async (req: Request, res: Response) => {
     try {
-      const { message } = req.body;
-      if (!message) return res.status(400).json({ error: 'Message is required' });
+      const { message } = req.body ?? {};
+
+      if (typeof message !== 'string' || !message.trim()) {
+        return res.status(400).json({
+          error: 'Message is required',
+        });
+      }
 
       const ai = getGeminiClient();
+
       if (!ai) {
-        return res.json({ response: `أهلاً بك في منصة عرفات! بخصوص استفسارك: "${message}"` });
+        return res.status(200).json({
+          response: `أهلاً بك في منصة عرفات. بخصوص استفسارك: "${message.trim()}"`,
+        });
       }
 
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
-        contents: [{ role: 'user', parts: [{ text: message }] }],
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              {
+                text: message.trim(),
+              },
+            ],
+          },
+        ],
       });
 
-      return res.json({ response: response.text || '' });
-    } catch (err: any) {
-      return res.status(500).json({ error: 'Failed to generate response', details: err.message });
+      return res.status(200).json({
+        response: response.text || '',
+      });
+    } catch (error) {
+      console.error('Error in /api/gemini/chat:', error);
+
+      return res.status(500).json({
+        error: 'Failed to generate response',
+      });
     }
   });
 
-  // 1.5 Translate Route
-  app.post('/api/translate', async (req, res) => {
+  // ==========================================
+  // Translation
+  // ==========================================
+
+  app.post('/api/translate', async (req: Request, res: Response) => {
     try {
-      const { text, targetLang = 'ar' } = req.body;
-      if (!text || !text.trim()) return res.status(400).json({ error: 'Text required' });
+      const {
+        text,
+        sourceLang = 'auto',
+        targetLang = 'ar',
+      } = req.body ?? {};
+
+      if (typeof text !== 'string' || !text.trim()) {
+        return res.status(400).json({
+          error: 'Text required',
+        });
+      }
 
       const ai = getGeminiClient();
-      if (!ai) return res.json({ translatedText: text });
+
+      if (!ai) {
+        return res.status(200).json({
+          translatedText: text.trim(),
+          sourceLang,
+          targetLang,
+        });
+      }
 
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
-        contents: [{ role: 'user', parts: [{ text: `Translate to ${targetLang}: ${text}` }] }],
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              {
+                text: `Translate the following text from ${sourceLang} to ${targetLang}. Return only the translated text:\n\n${text.trim()}`,
+              },
+            ],
+          },
+        ],
       });
 
-      return res.json({ translatedText: (response.text || text).trim(), targetLang });
-    } catch (err: any) {
-      return res.status(500).json({ error: 'Failed to translate', details: err.message });
+      return res.status(200).json({
+        translatedText: response.text?.trim() || text.trim(),
+        sourceLang,
+        targetLang,
+      });
+    } catch (error) {
+      console.error('Error in /api/translate:', error);
+
+      return res.status(500).json({
+        error: 'Failed to translate',
+      });
     }
   });
 
-  // Auth & Simulators
-  app.post('/api/auth/register', (req, res) => res.json({ success: true, message: 'تم التسجيل بنجاح' }));
-  app.post('/api/auth/login', (req, res) => res.json({ success: true }));
-  app.post('/api/whatsapp/connect', (req, res) => res.json({ success: true }));
-  app.post('/api/payments/subscribe', (req, res) => res.json({ success: true }));
+  // ==========================================
+  // Temporary Simulator Routes
+  // ==========================================
 
-  // Serve static UI or Vite dev middleware
+  app.post('/api/auth/register', (_req: Request, res: Response) => {
+    return res.status(200).json({
+      success: true,
+      message: 'تم التسجيل بنجاح',
+    });
+  });
+
+  app.post('/api/auth/login', (_req: Request, res: Response) => {
+    return res.status(200).json({
+      success: true,
+    });
+  });
+
+  app.post('/api/whatsapp/connect', (_req: Request, res: Response) => {
+    return res.status(200).json({
+      success: true,
+    });
+  });
+
+  app.post('/api/payments/subscribe', (_req: Request, res: Response) => {
+    return res.status(200).json({
+      success: true,
+    });
+  });
+
+  // ==========================================
+  // Serve Frontend
+  // ==========================================
+
   const distPath = path.join(currentDir, 'dist');
-  const isProduction = process.env.NODE_ENV === 'production' || fs.existsSync(distPath);
+  const indexPath = path.join(distPath, 'index.html');
+
+  const isProduction =
+    process.env.NODE_ENV === 'production' ||
+    fs.existsSync(indexPath);
 
   if (!isProduction) {
-    // 👈 استيراد ديناميكي لمنع تحميل Vite في بيئة الإنتاج Cloud Run
     const { createServer: createViteServer } = await import('vite');
+
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+      },
       appType: 'spa',
     });
+
     app.use(vite.middlewares);
   } else {
     app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+
+    app.get('*', (req: Request, res: Response, next: NextFunction) => {
+      if (req.path.startsWith('/api/')) {
+        return next();
+      }
+
+      if (!fs.existsSync(indexPath)) {
+        return res.status(404).json({
+          success: false,
+          error: 'Frontend build not found',
+        });
+      }
+
+      return res.sendFile(indexPath);
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Arafat Platform Full-Stack Server running on port ${PORT}`);
+  // ==========================================
+  // API 404
+  // ==========================================
+
+  app.use('/api', (_req: Request, res: Response) => {
+    return res.status(404).json({
+      success: false,
+      error: 'API route not found',
+    });
+  });
+
+  // ==========================================
+  // Global Error Handler
+  // ==========================================
+
+  app.use(
+    (
+      error: unknown,
+      _req: Request,
+      res: Response,
+      _next: NextFunction,
+    ) => {
+      console.error('Unhandled server error:', error);
+
+      return res.status(500).json({
+        success: false,
+        error: 'Internal server error',
+      });
+    },
+  );
+
+  // ==========================================
+  // Start Server
+  // ==========================================
+
+  const server = app.listen(PORT, '0.0.0.0', () => {
+    console.log(
+      `Arafat Platform Full-Stack Server running on 0.0.0.0:${PORT}`,
+    );
+  });
+
+  server.on('error', (error) => {
+    console.error('HTTP server error:', error);
+    process.exit(1);
   });
 }
 
-startServer();
+startServer().catch((error) => {
+  console.error('Fatal startup error:', error);
+  process.exit(1);
+});
