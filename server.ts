@@ -1,24 +1,23 @@
 import express from 'express';
 import path from 'path';
 import cors from 'cors';
+import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-// Safe directory path resolution for both dev (ESM) and bundled prod (CJS)
 const currentDir = process.cwd();
 
 async function startServer() {
   const app = express();
   
-  // 👈 تفعيل CORS لجميع المصادر للسماح بتواصل الواجهة الأمامية مع السيرفر
   app.use(cors());
   app.use(express.json());
 
-  // 👈 القراءة المباشرة من متغير البيئة الخاص بـ Cloud Run
-  const PORT = process.env.PORT || 8080;
+  // 👈 قراءة المنفذ وتحويله لرقم صريح لـ Cloud Run
+  const PORT = Number(process.env.PORT) || 8080;
 
   // Initialize Gemini AI Client lazily/safely
   const getGeminiClient = () => {
@@ -46,7 +45,7 @@ async function startServer() {
     res.json({ status: 'ok', service: 'Arafat Platform Backend' });
   });
 
-  // 1. 🤖 وكيل عرفات الذكي (Main Arafat Agent Endpoint - Multimodal & Text)
+  // 1. 🤖 وكيل عرفات الذكي (Main Arafat Agent Endpoint)
   app.post('/api/ai/chat', async (req, res) => {
     try {
       const {
@@ -67,7 +66,6 @@ async function startServer() {
 
       const userText = (message || '').trim() || 'الرجاء تحليل هذه الصورة الملتقطة بالكاميرا وإفادتي بالإرشادات المناسبة.';
 
-      // Max length limit
       if (userText.length > 2000) {
         return res.status(400).json({
           success: false,
@@ -78,7 +76,6 @@ async function startServer() {
       const ai = getGeminiClient();
 
       if (!ai) {
-        // Fallback simulated smart response if API Key is not set in environment
         const isAr = language === 'ar';
         let fallbackIntent = 'general_question';
         let requiresConfirmation = false;
@@ -88,8 +85,8 @@ async function startServer() {
         if (image) {
           fallbackIntent = 'ritual_guidance';
           fallbackText = isAr
-            ? `تم تحليل الصورة الملتقطة بنجاح. يتعرّف نظام عرفات الرؤية البصرية الذكية على العناصر المحيطة بك (المعالم المقدسة، إشارات الاتجاهات، أرقام الحافلات، مستلزمات الإحرام، أو الأدوية). تم التأكد من سلامتها ومطابقتها للإرشادات والخدمات المعتمدة في مكة المكرمة والمشاعر.`
-            : `Image successfully analyzed. Arafat AI Vision recognizes the environment around you (Holy Landmarks, Directional Signs, Bus Numbers, Ihram Gear, or Medical Supplies). Everything aligns with official guidelines.`;
+            ? `تم تحليل الصورة الملتقطة بنجاح. يتعرّف نظام عرفات الرؤية البصرية الذكية على العناصر المحيطة بك.`
+            : `Image successfully analyzed. Arafat AI Vision recognizes the environment around you.`;
         } else if (userText.includes('فندق') || userText.includes('حجز') || userText.includes('فنادق')) {
           fallbackIntent = 'hotel_search';
           requiresConfirmation = true;
@@ -104,26 +101,11 @@ async function startServer() {
             summary: 'حجز فندق قاطن في مكة المكرمة قبالة الحرم الشريف لمدة 3 ليالٍ',
           };
           fallbackText = isAr
-            ? `السلام عليكم ورحمة الله وبركاته. أنا عرفات رفيقك الذكي. بخصوص طلبك حول "${userText}"، أستطيع إرشادك بدقة خطوة بخطوة وإعداد خيارات السكن والتنقل.`
-            : `Welcome Pilgrim! Regarding "${userText}", I can guide you step-by-step through rituals, hotels, and transport.`;
-        } else if (userText.includes('ميزانية') || userText.includes('تكلفة')) {
-          fallbackIntent = 'budget_planning';
-          requiresConfirmation = true;
-          proposedAction = {
-            actionType: 'CALCULATE_BUDGET',
-            payload: {
-              travelersCount: 2,
-              days: 7,
-              currency,
-            },
-            summary: `حساب ميزانية رحلة العمرة لشخصين لمدة 7 أيام بالعملة (${currency})`,
-          };
-          fallbackText = isAr
-            ? `السلام عليكم ورحمة الله وبركاته. أنا عرفات رفيقك الذكي. تم حساب الميزانية المتوقعة لرحلتك.`
-            : `Budget calculated for your journey.`;
+            ? `السلام عليكم ورحمة الله وبركاته. أنا عرفات رفيقك الذكي. بخصوص طلبك حول "${userText}"، أستطيع إرشادك بدقة خطوة بخطوة.`
+            : `Welcome Pilgrim! Regarding "${userText}", I can guide you step-by-step.`;
         } else {
           fallbackText = isAr
-            ? `السلام عليكم ورحمة الله وبركاته. أنا عرفات رفيقك الذكي. بخصوص طلبك حول "${userText}"، أستطيع إرشادك بدقة خطوة بخطوة وإعداد خيارات السكن والتنقل والحسابات المعتمدة.`
+            ? `السلام عليكم ورحمة الله وبركاته. أنا عرفات رفيقك الذكي. بخصوص طلبك حول "${userText}"، أستطيع إرشادك بدقة.`
             : `Welcome Pilgrim! Regarding your request "${userText}", I can guide you step-by-step.`;
         }
 
@@ -142,39 +124,8 @@ async function startServer() {
 
       const systemInstruction = `
 أنت عرفات، الرفيق الإيماني والوكيل الذكي لضيوف الرحمن، والمزود بخصائص التعرف البصري والصوتي المتقدمة.
-
-مهمتك مساعدة الحجاج والمعتمرين في التخطيط للرحلة، وفهم المناسك، والوصول إلى الأماكن، والتعرف على العناصر والمعالم والأدوية واللوحات من حولهم بواسطة الكاميرا، وطلب الفنادق والنقل والخدمات.
-
+مهمتك مساعدة الحجاج والمعتمرين في التخطيط للرحلة، وفهم المناسك، والوصول إلى الأماكن.
 تحدث بأسلوب مهذب، هادئ، وقور، واضح ومطمئن.
-استخدم لغة المستخدم المختارة (${language})، والعملة (${currency})، وراعِ اتجاه اللغة وثقافتها.
-
-عند إرفاق صورة ملتقطة بالكاميرا:
-- قم بتحليل الصورة بدقة ودون تحيز.
-- تمييز المعالم والمشاعر المقدسة (الكعبة، مقام إبراهيم، الحجر الأسود، الصفا والمروة، منى، عرفات، مزدلفة، المسجد النبوي).
-- تمييز اللوحات الإرشادية، أرقام الأبواب، اتجاه القبلة، وأرقام الحافلات وشرائح الاتصال.
-- تمييز مقتنيات الإحرام، وتوضيح الأحكام الدينية الصريحة المتعلقة بمحظورات وتيسيرات الإحرام من المراجع الرسمية.
-- تمييز الأدوية والمستلزمات الطبية وإبراز إرشادات السلامة العامة.
-
-في المسائل الدينية والمناسك:
-- احرص دائماً على أن تكون جميع المخرجات والمعلومات الدينية والمناسك مستمدة حصراً من المصادر والمراجع الرسمية المعتمدة (مثل وزارة الشؤون الإسلامية والدعوة والإرشاد، والرئاسة العامة للبحوث العلمية والإفتاء، ووزارة الحج والعمرة، والهيئة العامة للعناية بشؤون المسجد الحرام والمسجد النبوي).
-- لا تخترع حكمًا شرعيًا.
-- تذكر واذكر عند تقديم الفتاوى أو الإرشادات الدينية التنويه التالي: "تنويه: التطبيق رفيق إرشادي ومساعد ذكي ولا يغني عن الفتاوى الرسمية".
-
-في الحجوزات والخدمات:
-- لا تدّعِ أن الحجز تم ما لم تؤكد نظام التنفيذ نجاحه.
-- اعرض الطلب على المستخدم بوضوح قبل تنفيذه.
-
-يجب أن تصنف النية (intent) إلى واحدة من الفئات التالية:
-[general_question, ritual_guidance, journey_planning, budget_planning, hotel_search, transport_request, booking_request, places_search, directions_request, permit_guidance, dua_and_adhkar, health_guidance, emergency, human_support, complaint, unknown]
-
-المخرج المرجو يجب أن يكون JSON حصراً بالشكل التالي:
-{
-  "message": "نص الرد الموجه للمستخدم بلغة مهذبة وواضحة وسلسة مجهزة للنعطيل/القراءة الصوتية",
-  "intent": "اسم النية المكتشفة",
-  "requiresConfirmation": true_or_false,
-  "proposedAction": null_or_object_with_actionType_payload_summary,
-  "suggestedReplies": ["مقترح 1", "مقترح 2", "مقترح 3"]
-}
 `;
 
       const promptText = `User Context: ${JSON.stringify(userContext)}
@@ -251,7 +202,7 @@ Respond ONLY with valid JSON conforming to the requested schema.`;
       return res.status(500).json({
         success: false,
         conversationId: req.body.conversationId || `conv_${Date.now()}`,
-        message: 'نعتذر، حدثت صعوبة مؤقتة في التواصل مع الوكيل الذكي. يمكنك إعادت المحاولة.',
+        message: 'نعتذر، حدثت صعوبة مؤقتة في التواصل مع الوكيل الذكي.',
         intent: 'unknown',
         requiresConfirmation: false,
         proposedAction: null,
@@ -260,184 +211,72 @@ Respond ONLY with valid JSON conforming to the requested schema.`;
     }
   });
 
-  // 1.1 🤖 وكيل عرفات (Legacy Compatible Route)
+  // 1.1 Legacy Route
   app.post('/api/gemini/chat', async (req, res) => {
     try {
-      const { message, lang = 'ar', history = [] } = req.body;
-      if (!message) {
-        return res.status(400).json({ error: 'Message is required' });
-      }
+      const { message, lang = 'ar' } = req.body;
+      if (!message) return res.status(400).json({ error: 'Message is required' });
 
       const ai = getGeminiClient();
-
       if (!ai) {
-        const fallbackText = lang === 'ar'
-          ? `أهلاً بك في منصة عرفات! أنا وكيلك الذكي. بخصوص استفسارك حول: "${message}"، يسعدني إرشادك في كافة مناسك الحج والعمرة، حساب الميزانية، وتحديد الأماكن والمواقيت بدقة.`
-          : `Welcome to Arafat Platform! Regarding your question: "${message}", I am here to guide you through Hajj, Umrah, budget calculation, and holy sites navigation.`;
-        return res.json({ response: fallbackText });
+        return res.json({ response: `أهلاً بك في منصة عرفات! بخصوص استفسارك: "${message}"` });
       }
-
-      const systemInstruction = `أنت عرفات - وكيلك الذكي، المستشار والمساعد الإرشادي لمناسك الحج والعمرة والزيارة في مكة المكرمة والمدينة المنورة والمشاعر المقدسة.
-جميع المخرجات والمعلومات الدينية والمناسك مستمدة من المصادر والمراجع الرسمية المعتمدة (مثل وزارة الشؤون الإسلامية والدعوة والإرشاد والرئاسة العامة للبحوث العلمية والإفتاء ووزارة الحج والعمرة).
-تنويه هام: التطبيق رفيق إرشادي ومساعد ذكي ولا يغني عن الفتاوى الرسمية.`;
-
-      const formattedContents = [
-        ...history.map((h: any) => ({
-          role: h.sender === 'user' ? 'user' : 'model',
-          parts: [{ text: h.text }],
-        })),
-        { role: 'user', parts: [{ text: message }] },
-      ];
 
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
-        contents: formattedContents,
-        config: {
-          systemInstruction,
-          temperature: 0.7,
-        },
+        contents: [{ role: 'user', parts: [{ text: message }] }],
       });
 
-      const replyText = response.text || (lang === 'ar' ? 'نعتذر، لم نتمكن من جلب الإجابة حالياً.' : 'Sorry, unable to get response.');
-      return res.json({ response: replyText });
-
+      return res.json({ response: response.text || '' });
     } catch (err: any) {
-      console.error('Error calling Gemini API:', err);
-      return res.status(500).json({
-        error: 'Failed to generate response from Arafat AI Agent',
-        details: err.message,
-      });
+      return res.status(500).json({ error: 'Failed to generate response', details: err.message });
     }
   });
 
-  // 1.5 🌐 خدمة الترجمة الفورية المباشرة لضيوف الرحمن (Instant Translation API)
+  // 1.5 Translate Route
   app.post('/api/translate', async (req, res) => {
     try {
       const { text, sourceLang = 'auto', targetLang = 'ar' } = req.body;
-      if (!text || !text.trim()) {
-        return res.status(400).json({ error: 'Text to translate is required' });
-      }
+      if (!text || !text.trim()) return res.status(400).json({ error: 'Text required' });
 
       const ai = getGeminiClient();
-
-      if (!ai) {
-        return res.json({
-          translatedText: text,
-          sourceLang,
-          targetLang,
-          note: 'Offline/Default response mode',
-        });
-      }
-
-      const prompt = `Translate the following text accurately for a Hajj/Umrah pilgrim or Saudi service provider.
-Source Language: ${sourceLang}
-Target Language: ${targetLang}
-Text to Translate: "${text}"
-
-Provide ONLY the clean translated text without any explanation, quotes, or markdown wrappers.`;
+      if (!ai) return res.json({ translatedText: text });
 
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        config: {
-          temperature: 0.2,
-        },
+        contents: [{ role: 'user', parts: [{ text: `Translate to ${targetLang}: ${text}` }] }],
       });
 
-      const translatedText = (response.text || text).trim();
-      return res.json({
-        translatedText,
-        sourceLang,
-        targetLang,
-      });
+      return res.json({ translatedText: (response.text || text).trim(), sourceLang, targetLang });
     } catch (err: any) {
-      console.error('Translation endpoint error:', err);
-      return res.status(500).json({
-        error: 'Failed to translate text',
-        details: err.message,
-      });
+      return res.status(500).json({ error: 'Failed to translate', details: err.message });
     }
   });
 
-  // 10. 👤 حساب المستخدم والتسجيل والدخول والاشتراك
-  app.post('/api/auth/register', (req, res) => {
-    const { country, phone, email, name, subscription = 'free' } = req.body;
-    if (!phone || !email) {
-      return res.status(400).json({ error: 'Phone and Email are required' });
-    }
-    const user = {
-      id: 'usr_' + Date.now(),
-      name: name || 'ضيف الرحمن',
-      country: country || 'المملكة العربية السعودية',
-      phone,
-      email,
-      subscriptionPlan: subscription,
-      trialDaysLeft: subscription === 'free' ? 7 : 30,
-      whatsappConnected: true,
-      createdAt: new Date().toISOString(),
-    };
-    return res.json({ success: true, user, message: 'تم إنشاء حسابك بنجاح وربطه بالواتساب' });
-  });
+  // Auth & Simulators
+  app.post('/api/auth/register', (req, res) => res.json({ success: true, message: 'تم التسجيل بنجاح' }));
+  app.post('/api/auth/login', (req, res) => res.json({ success: true }));
+  app.post('/api/whatsapp/connect', (req, res) => res.json({ success: true }));
+  app.post('/api/payments/subscribe', (req, res) => res.json({ success: true }));
 
-  app.post('/api/auth/login', (req, res) => {
-    const { phoneOrEmail } = req.body;
-    if (!phoneOrEmail) {
-      return res.status(400).json({ error: 'Phone or Email is required' });
-    }
-    const user = {
-      id: 'usr_active',
-      name: 'ضيف الرحمن',
-      country: 'المملكة العربية السعودية',
-      phone: phoneOrEmail.includes('@') ? '+966500000000' : phoneOrEmail,
-      email: phoneOrEmail.includes('@') ? phoneOrEmail : 'user@arafat.app',
-      subscriptionPlan: '7_days_trial',
-      trialDaysLeft: 7,
-      whatsappConnected: true,
-    };
-    return res.json({ success: true, user });
-  });
+  // 👈 التحقق التلقائي من وجود مجلد dist لمنع تشغيل Vite Dev Server بالخطأ في Cloud Run
+  const distPath = path.join(currentDir, 'dist');
+  const isProduction = process.env.NODE_ENV === 'production' || fs.existsSync(distPath);
 
-  // 8. 📱 WhatsApp Cloud API Connection Simulator
-  app.post('/api/whatsapp/connect', (req, res) => {
-    const { phone } = req.body;
-    return res.json({
-      success: true,
-      phone,
-      status: 'connected',
-      message: `تم ربط رقمك ${phone} ببرنامج الواتساب السحابي لمنصة عرفات لتلقي التنبيهات وإشعار الحجوزات.`,
-    });
-  });
-
-  // 9. 💳 Payment Processing Simulator
-  app.post('/api/payments/subscribe', (req, res) => {
-    const { plan, paymentMethod, amount, currency } = req.body;
-    return res.json({
-      success: true,
-      transactionId: 'TXN_' + Math.random().toString(36).substring(2, 9).toUpperCase(),
-      plan,
-      amount,
-      currency,
-      paymentMethod,
-      message: 'تمت عملية الاشتراك بنجاح! تم تفعيل حسابك المتقدم في عرفات.',
-    });
-  });
-
-  // Vite or Static file serving
-  if (process.env.NODE_ENV !== 'production') {
+  if (!isProduction) {
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
 
-  // 👈 ربط السيرفر بالمنفذ الديناميكي والـ Host المناسب لـ Cloud Run
+  // 👈 ربط السيرفر بالمنفذ والـ Host المناسب لـ Cloud Run
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Arafat Platform Full-Stack Server running on port ${PORT}`);
   });
