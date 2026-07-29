@@ -1,5 +1,6 @@
 import express from 'express';
 import path from 'path';
+import cors from 'cors';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
@@ -12,10 +13,12 @@ const currentDir = process.cwd();
 async function startServer() {
   const app = express();
   
+  // 👈 تفعيل CORS لجميع المصادر للسماح بتواصل الواجهة الأمامية مع السيرفر
+  app.use(cors());
+  app.use(express.json());
+
   // 👈 القراءة المباشرة من متغير البيئة الخاص بـ Cloud Run
   const PORT = process.env.PORT || 8080;
-
-  app.use(express.json());
 
   // Initialize Gemini AI Client lazily/safely
   const getGeminiClient = () => {
@@ -211,7 +214,7 @@ Respond ONLY with valid JSON conforming to the requested schema.`;
       parts.push({ text: promptText });
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash', // 👈 تعديل اسم النموذج إلى الأصدار المعتمد
+        model: 'gemini-2.5-flash',
         contents: [{ role: 'user', parts }],
         config: {
           systemInstruction,
