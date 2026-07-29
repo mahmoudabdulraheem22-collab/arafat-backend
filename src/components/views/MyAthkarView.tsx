@@ -23,6 +23,11 @@ import {
   Bookmark,
   Layers,
   HelpCircle,
+  Repeat,
+  Headphones,
+  HardDriveDownload,
+  Wifi,
+  WifiOff,
 } from 'lucide-react';
 import { LanguageOption } from '../../data/languages';
 import {
@@ -36,20 +41,99 @@ import {
   ColoredSurah,
 } from '../../data/quranData';
 
+import { TTSPlayButton } from '../common/TTSPlayButton';
+import { OfflineSyncStatus } from '../common/OfflineSyncStatus';
+
 interface MyAthkarViewProps {
   language: LanguageOption;
   onBack: () => void;
+  onToggleTTS?: (track: { id: string; title: string; text: string; category?: string; subTitle?: string }) => void;
+  currentTTSTrackId?: string;
+  isTTSPlaying?: boolean;
 }
 
-export const MyAthkarView: React.FC<MyAthkarViewProps> = ({ language, onBack }) => {
+export const MyAthkarView: React.FC<MyAthkarViewProps> = ({
+  language,
+  onBack,
+  onToggleTTS,
+  currentTTSTrackId,
+  isTTSPlaying = false,
+}) => {
   const isAr = language.code === 'ar';
 
   // Navigation main tab
-  const [mainTab, setMainTab] = useState<'athkar' | 'qaris' | 'radio' | 'mushaf' | 'hadiths'>('athkar');
+  const [mainTab, setMainTab] = useState<'athkar' | 'offline' | 'qaris' | 'radio' | 'mushaf' | 'hadiths'>('athkar');
 
   // --- 1. Athkar & Tasbeeh State ---
-  const [activeCategory, setActiveCategory] = useState<'sabah' | 'massa' | 'umrah' | 'tawaf' | 'arafat'>('sabah');
+  const [activeCategory, setActiveCategory] = useState<'talbiyah' | 'sabah' | 'massa' | 'umrah' | 'tawaf' | 'arafat'>('talbiyah');
   const [tasbeehCount, setTasbeehCount] = useState<number>(0);
+
+  // --- Talbiyah Audio & Repeater State ---
+  const [isTalbiyahPlaying, setIsTalbiyahPlaying] = useState<boolean>(false);
+  const [talbiyahLoop, setTalbiyahLoop] = useState<boolean>(true);
+  const [talbiyahCount, setTalbiyahCount] = useState<number>(0);
+  const [talbiyahSpeed, setTalbiyahSpeed] = useState<number>(0.85);
+
+  const isTalbiyahPlayingRef = useRef<boolean>(isTalbiyahPlaying);
+  const talbiyahLoopRef = useRef<boolean>(talbiyahLoop);
+  const talbiyahSpeedRef = useRef<number>(talbiyahSpeed);
+
+  useEffect(() => {
+    isTalbiyahPlayingRef.current = isTalbiyahPlaying;
+  }, [isTalbiyahPlaying]);
+
+  useEffect(() => {
+    talbiyahLoopRef.current = talbiyahLoop;
+  }, [talbiyahLoop]);
+
+  useEffect(() => {
+    talbiyahSpeedRef.current = talbiyahSpeed;
+  }, [talbiyahSpeed]);
+
+  const playTalbiyahSpeechCycle = () => {
+    const talbiyahText = 'لَبَّيْكَ اللَّهُمَّ لَبَّيْكَ، لَبَّيْكَ لاَ شَرِيكَ لَكَ لَبَّيْكَ، إِنَّ الْحَمْدَ وَالنِّعْمَةَ لَكَ وَالْمُلْكُ، لاَ شَرِيكَ لَكَ';
+
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(talbiyahText);
+      utterance.lang = 'ar-SA';
+      utterance.rate = talbiyahSpeedRef.current;
+      utterance.pitch = 1.0;
+
+      utterance.onend = () => {
+        setTalbiyahCount((prev) => prev + 1);
+        if (talbiyahLoopRef.current && isTalbiyahPlayingRef.current) {
+          setTimeout(() => {
+            if (isTalbiyahPlayingRef.current) {
+              playTalbiyahSpeechCycle();
+            }
+          }, 1100);
+        } else {
+          setIsTalbiyahPlaying(false);
+        }
+      };
+
+      utterance.onerror = () => {
+        setIsTalbiyahPlaying(false);
+      };
+
+      window.speechSynthesis.speak(utterance);
+    } else {
+      setTalbiyahCount((prev) => prev + 1);
+    }
+  };
+
+  const handleToggleTalbiyahAudio = () => {
+    if (isTalbiyahPlaying) {
+      setIsTalbiyahPlaying(false);
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+    } else {
+      setIsTalbiyahPlaying(true);
+      playTalbiyahSpeechCycle();
+    }
+  };
 
   // --- 2. Qaris Recitation Audio State ---
   const [selectedQari, setSelectedQari] = useState<Qari>(RECITERS_DATA[0]);
@@ -78,6 +162,7 @@ export const MyAthkarView: React.FC<MyAthkarViewProps> = ({ language, onBack }) 
 
   // Athkar static dataset
   const athkarCategories = [
+    { id: 'talbiyah', titleAr: 'التلبية والتكبير 🕋', titleEn: 'Talbiyah Chants', icon: Volume2 },
     { id: 'sabah', titleAr: 'أذكار الصباح', titleEn: 'Morning Athkar', icon: Sun },
     { id: 'massa', titleAr: 'أذكار المساء', titleEn: 'Evening Athkar', icon: Moon },
     { id: 'umrah', titleAr: 'دعاء العمرة والإحرام', titleEn: 'Umrah & Ihram Duas', icon: BookOpen },
@@ -85,7 +170,29 @@ export const MyAthkarView: React.FC<MyAthkarViewProps> = ({ language, onBack }) 
     { id: 'arafat', titleAr: 'أدعية يوم عرفة المأثورة', titleEn: 'Arafat Blessed Duas', icon: Heart },
   ];
 
-  const athkarData = {
+  const athkarData: Record<string, Array<{ text: string; repeat: number; noteAr?: string }>> = {
+    talbiyah: [
+      {
+        text: 'لَبَّيْكَ اللَّهُمَّ لَبَّيْكَ، لَبَّيْكَ لاَ شَرِيكَ لَكَ لَبَّيْكَ، إِنَّ الْحَمْدَ وَالنِّعْمَةَ لَكَ وَالْمُلْكُ، لاَ شَرِيكَ لَكَ.',
+        repeat: 100,
+        noteAr: 'شعار الحج والعمرة الأعظم، يُسنّ رفع الصوت بها للرجال وإسرارها للنساء من حين الإحرام حتى بدء الطواف في العمرة أو رمي جمرة العقبة في الحج.'
+      },
+      {
+        text: 'لَبَّيْكَ إِلَٰهَ الْحَقِّ لَبَّيْكَ.',
+        repeat: 33,
+        noteAr: 'من صيغ التلبية الثابتة المأثورة عن النبي ﷺ.'
+      },
+      {
+        text: 'اللَّهُ أَكْبَرُ، اللَّهُ أَكْبَرُ، اللَّهُ أَكْبَرُ، لاَ إِلَٰهَ إِلاَّ اللَّهُ، اللَّهُ أَكْبَرُ، اللَّهُ أَكْبَرُ، وَلِلَّهِ الْحَمْدُ.',
+        repeat: 10,
+        noteAr: 'تكبيرات العيد والمشاعر المقدسة ومنا والمزدلفة.'
+      },
+      {
+        text: 'لَبَّيْكَ عُمْرَةً وَحَجًّا ، لَبَّيْكَ حَقًّا حَقًّا تعبُّداً ورِقّاً.',
+        repeat: 10,
+        noteAr: 'صيغة عقد النية والجهر بالتلبية.'
+      }
+    ],
     sabah: [
       { text: 'أَصْبَحْنَا وَأَصْبَحَ الْمُلْكُ لِلَّهِ، وَالْحَمْدُ لِلَّهِ لاَ إِلَهَ إِلاَّ اللَّهُ وَحْدَهُ لاَ شَرِيكَ لَهُ.', repeat: 1 },
       { text: 'اللَّهُمَّ بِكَ أَصْبَحْنَا، وَبِكَ أَمْسَيْنَا، وَبِكَ نَحْيَا، وَبِكَ نَمُوتُ وَإِلَيْكَ النُّشُورُ.', repeat: 1 },
@@ -247,6 +354,18 @@ export const MyAthkarView: React.FC<MyAthkarViewProps> = ({ language, onBack }) 
         </button>
 
         <button
+          onClick={() => setMainTab('offline')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+            mainTab === 'offline'
+              ? 'bg-[#D4AF37] text-[#02130D] shadow-[0_0_15px_rgba(212,175,55,0.4)]'
+              : 'text-[#F8F3E7] hover:bg-[#03291F]'
+          }`}
+        >
+          <HardDriveDownload className="w-4 h-4 text-[#D4AF37]" />
+          <span>{isAr ? 'أدعية الأوفلاين (بدون إنترنت)' : 'Offline Duas Storage'}</span>
+        </button>
+
+        <button
           onClick={() => setMainTab('qaris')}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
             mainTab === 'qaris'
@@ -324,20 +443,153 @@ export const MyAthkarView: React.FC<MyAthkarViewProps> = ({ language, onBack }) 
             </div>
 
             <div className="space-y-3">
-              {(athkarData[activeCategory] || []).map((item, idx) => (
-                <div key={idx} className="p-4 rounded-2xl bg-[#03291F] border border-[#D4AF37]/40 space-y-2">
-                  <p className="text-base font-serif text-[#F8F3E7] leading-loose text-center">
-                    "{item.text}"
-                  </p>
-                  <div className="flex items-center justify-between text-[11px] text-[#D4AF37] border-t border-[#D4AF37]/20 pt-2 mt-2">
-                    <span>{isAr ? `التكرار المستحب: ${item.repeat} مرة` : `Repeat: ${item.repeat} times`}</span>
-                    <span className="flex items-center gap-1">
-                      <Award className="w-3.5 h-3.5" />
-                      {isAr ? 'مأثور وموثق' : 'Authentic'}
-                    </span>
+              {/* Interactive Talbiyah Audio Player Card (مفتاح التلبية وترديد المناسك) */}
+              {activeCategory === 'talbiyah' && (
+                <div className="p-5 rounded-3xl bg-gradient-to-b from-[#03291F] via-[#021811] to-[#01140E] border-2 border-[#D4AF37] shadow-[0_0_25px_rgba(212,175,55,0.25)] space-y-4 mb-4">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-[#D4AF37]/30 pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-10 h-10 rounded-2xl bg-[#D4AF37]/20 border border-[#D4AF37] flex items-center justify-center text-[#D4AF37]">
+                        <Headphones className="w-5 h-5 animate-pulse" />
+                      </div>
+                      <div>
+                        <h4 className="text-base font-black text-[#D4AF37]">
+                          {isAr ? 'مفتاح التلبية والترديد التفاعلي' : 'Interactive Talbiyah Repeater Key'}
+                        </h4>
+                        <p className="text-xs text-[#F8F3E7]/80">
+                          {isAr ? 'استمع وردّد شعار الحج والعمرة مع التكرار التلقائي طوال الطريق' : 'Listen and recite along with automatic looping'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 bg-[#02130D] px-3 py-1.5 rounded-xl border border-[#D4AF37]/40">
+                      <Repeat className={`w-4 h-4 ${talbiyahLoop ? 'text-emerald-400 animate-spin' : 'text-gray-400'}`} />
+                      <span className="text-xs font-bold text-[#D4AF37]">
+                        {isAr ? `تكرار التلبية: ${talbiyahCount} مرة` : `Talbiyah Count: ${talbiyahCount}`}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Sacred Talbiyah Calligraphy Display */}
+                  <div className="p-4 rounded-2xl bg-[#01140E] border border-[#D4AF37]/50 text-center relative overflow-hidden">
+                    <p className="text-lg sm:text-xl md:text-2xl font-serif text-[#D4AF37] leading-relaxed font-bold tracking-wide">
+                      «لَبَّيْكَ اللَّهُمَّ لَبَّيْكَ، لَبَّيْكَ لاَ شَرِيكَ لَكَ لَبَّيْكَ، إِنَّ الْحَمْدَ وَالنِّعْمَةَ لَكَ وَالْمُلْكُ، لاَ شَرِيكَ لَكَ»
+                    </p>
+                    <p className="text-xs text-[#F8F3E7]/70 mt-2 font-sans italic">
+                      "Here I am, O Allah, here I am. Here I am, You have no partner, here I am. All praise, grace and sovereignty belong to You."
+                    </p>
+                  </div>
+
+                  {/* Control Keys Row */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 pt-1">
+                    {/* Main Audio Toggle Key */}
+                    <button
+                      onClick={handleToggleTalbiyahAudio}
+                      className={`flex items-center justify-center gap-2.5 py-3 px-4 rounded-2xl font-bold text-xs sm:text-sm transition-all cursor-pointer shadow-lg ${
+                        isTalbiyahPlaying
+                          ? 'bg-rose-600 hover:bg-rose-700 text-white shadow-rose-900/50 animate-pulse'
+                          : 'bg-gradient-to-r from-[#D4AF37] to-[#AA820A] text-[#02130D] hover:scale-102 shadow-[0_0_20px_rgba(212,175,55,0.4)]'
+                      }`}
+                    >
+                      {isTalbiyahPlaying ? (
+                        <>
+                          <Pause className="w-5 h-5" />
+                          <span>{isAr ? 'إيقاف الترديد الصوتي' : 'Stop Recitation'}</span>
+                        </>
+                      ) : (
+                        <>
+                          <Play className="w-5 h-5 fill-current" />
+                          <span>{isAr ? 'تشغيل وترديد التلبية' : 'Play & Recite Talbiyah'}</span>
+                        </>
+                      )}
+                    </button>
+
+                    {/* Loop Toggle Key */}
+                    <button
+                      onClick={() => setTalbiyahLoop(!talbiyahLoop)}
+                      className={`flex items-center justify-center gap-2 py-3 px-3 rounded-2xl font-bold text-xs transition-all cursor-pointer border ${
+                        talbiyahLoop
+                          ? 'bg-emerald-950/80 border-emerald-500 text-emerald-300'
+                          : 'bg-[#02130D] border-[#D4AF37]/30 text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      <Repeat className="w-4 h-4" />
+                      <span>{isAr ? (talbiyahLoop ? 'التكرار التلقائي: مُفَعَّل' : 'التكرار التلقائي: معطّل') : 'Auto-Loop: On'}</span>
+                    </button>
+
+                    {/* Speed Key */}
+                    <div className="flex items-center justify-between bg-[#02130D] px-3 py-2 rounded-2xl border border-[#D4AF37]/40">
+                      <span className="text-[11px] text-[#D4AF37] font-bold">{isAr ? 'سرعة الصوت:' : 'Speed:'}</span>
+                      <div className="flex items-center gap-1">
+                        {[
+                          { val: 0.75, label: '0.75x' },
+                          { val: 0.85, label: '0.85x' },
+                          { val: 1.0, label: '1.0x' },
+                        ].map((s) => (
+                          <button
+                            key={s.val}
+                            onClick={() => setTalbiyahSpeed(s.val)}
+                            className={`px-2 py-1 rounded-lg text-[10px] font-bold cursor-pointer ${
+                              talbiyahSpeed === s.val
+                                ? 'bg-[#D4AF37] text-[#02130D]'
+                                : 'bg-[#03291F] text-[#F8F3E7] hover:bg-[#073D2F]'
+                            }`}
+                          >
+                            {s.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Manual Counter Tap Key */}
+                    <button
+                      onClick={() => setTalbiyahCount((prev) => prev + 1)}
+                      className="flex items-center justify-center gap-2 py-3 px-3 rounded-2xl bg-[#02130D] border border-[#D4AF37] text-[#D4AF37] hover:bg-[#073D2F] font-bold text-xs transition-all cursor-pointer"
+                    >
+                      <Volume2 className="w-4 h-4" />
+                      <span>{isAr ? 'ردّد معي (+1)' : 'Count (+1)'}</span>
+                    </button>
                   </div>
                 </div>
-              ))}
+              )}
+
+              {(athkarData[activeCategory] || []).map((item, idx) => {
+                const itemId = `athkar_${activeCategory}_${idx}`;
+                return (
+                  <div key={idx} className="p-4 rounded-2xl bg-[#03291F] border border-[#D4AF37]/40 space-y-3">
+                    <p className="text-base sm:text-lg font-serif text-[#F8F3E7] leading-loose text-center">
+                      "{item.text}"
+                    </p>
+                    {item.noteAr && (
+                      <p className="text-xs text-[#D4AF37]/90 bg-[#02130D] p-2.5 rounded-xl border border-[#D4AF37]/30 text-center">
+                        💡 {item.noteAr}
+                      </p>
+                    )}
+                    <div className="flex flex-wrap items-center justify-between text-[11px] text-[#D4AF37] border-t border-[#D4AF37]/20 pt-2 gap-2">
+                      <span className="font-bold">{isAr ? `التكرار المستحب: ${item.repeat} مرة` : `Repeat: ${item.repeat} times`}</span>
+
+                      {onToggleTTS && (
+                        <TTSPlayButton
+                          trackId={itemId}
+                          title={athkarCategories.find((c) => c.id === activeCategory)?.titleAr || 'دعاء ومأثور'}
+                          text={item.text}
+                          category={isAr ? 'الأذكار والمأثورات' : 'Athkar'}
+                          isPlaying={isTTSPlaying}
+                          isCurrentTrack={currentTTSTrackId === itemId}
+                          onToggle={onToggleTTS}
+                          variant="pill"
+                          labelAr="استماع بالذكاء الاصطناعي 🔊"
+                          labelEn="Listen TTS 🔊"
+                          isAr={isAr}
+                        />
+                      )}
+
+                      <span className="flex items-center gap-1">
+                        <Award className="w-3.5 h-3.5" />
+                        {isAr ? 'مأثور وموثق' : 'Authentic'}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -368,6 +620,50 @@ export const MyAthkarView: React.FC<MyAthkarViewProps> = ({ language, onBack }) 
               <RotateCcw className="w-4 h-4" />
               <span>{isAr ? 'تصفير العداد' : 'Reset Counter'}</span>
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* TAB OFFLINE: Offline Storage Duas & Management             */}
+      {/* ========================================================= */}
+      {mainTab === 'offline' && (
+        <div className="space-y-6 animate-fadeIn bg-[#01140E] p-6 rounded-2xl border-2 border-[#D4AF37]">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-[#D4AF37]/30 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-[#03291F] border border-[#D4AF37] rounded-2xl text-[#D4AF37]">
+                <HardDriveDownload className="w-6 h-6 animate-pulse" />
+              </div>
+              <div>
+                <h3 className="text-lg sm:text-xl font-black text-[#D4AF37]">
+                  {isAr ? 'مركز التخزين المحلي للأدعية والأذكار (Offline Storage)' : 'Offline Duas & Adhkar Local Hub'}
+                </h3>
+                <p className="text-xs text-[#F8F3E7]/80">
+                  {isAr
+                    ? 'حزمة شاملة بذاكرة الجهاز الدائمة لضمان وصولك للأدعية والأذكار بدون شبكة في المشاعر'
+                    : 'All essential supplications saved locally on your device for network-free pilgrimage'}
+                </p>
+              </div>
+            </div>
+
+            <OfflineSyncStatus
+              onToggleTTS={onToggleTTS}
+              currentTTSTrackId={currentTTSTrackId}
+              isTTSPlaying={isTTSPlaying}
+            />
+          </div>
+
+          <div className="bg-[#03291F] p-5 rounded-2xl border border-[#D4AF37]/40 text-xs text-[#F8F3E7] space-y-2">
+            <div className="flex items-center gap-2 font-bold text-[#D4AF37]">
+              <Sparkles className="w-4 h-4" />
+              <span>{isAr ? 'مميزات حزمة التخزين المحلي في منصة عرفات:' : 'Arafat Offline Storage Features:'}</span>
+            </div>
+            <ul className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px] text-[#F8F3E7]/90 list-disc list-inside">
+              <li>{isAr ? 'تضم أكثر من 25 دعاءً مأثوراً للإحرام، الطواف، السعي، عرفة، ومزدلفة' : 'Over 25 essential prayers for Ihram, Tawaf, Sa\'i, & Arafat'}</li>
+              <li>{isAr ? 'إمكانية إضافة أدعيتك الخاصة وحفظها محلياً بذاكرة الهاتف' : 'Add & save custom prayers locally on your device'}</li>
+              <li>{isAr ? 'دعم مفضلة الأدعية وتصفيتها بضغطة زر واحدة أوفلاين' : 'Bookmark favorite prayers for one-tap offline access'}</li>
+              <li>{isAr ? 'محرك نطق صوتی (TTS) نقي لنطق الأدعية المأثورة بدون إنترنت' : 'Vocal TTS engine for clear Dua pronunciation offline'}</li>
+            </ul>
           </div>
         </div>
       )}

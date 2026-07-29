@@ -43,7 +43,21 @@ export const ArafatAssistant: React.FC<ArafatAssistantProps> = ({
     userContext,
   });
 
-  const { isMuted, toggleMute } = useSpeechSynthesis();
+  const { isMuted, isSpeaking, currentMessageId, toggleMute, speak, stop } = useSpeechSynthesis();
+  const lastSpokenIdRef = React.useRef<string | null>(null);
+
+  // Automatically read out new assistant messages when not muted OR when autoSpeak is flagged
+  React.useEffect(() => {
+    if (messages.length > 0) {
+      const lastMsg = messages[messages.length - 1];
+      if (lastMsg.role === 'assistant' && lastMsg.id !== lastSpokenIdRef.current) {
+        if (!isMuted || lastMsg.autoSpeak) {
+          lastSpokenIdRef.current = lastMsg.id;
+          speak(lastMsg.content, language.code, lastMsg.id);
+        }
+      }
+    }
+  }, [messages, isMuted, language.code, speak]);
 
   if (!isOpen) return null;
 
@@ -60,6 +74,7 @@ export const ArafatAssistant: React.FC<ArafatAssistantProps> = ({
         <AssistantHeader
           language={language}
           isMuted={isMuted}
+          isSpeaking={isSpeaking}
           onToggleMute={toggleMute}
           onClearChat={clearChat}
           onRequestHumanSupport={() => requestHumanSupport()}
@@ -77,6 +92,9 @@ export const ArafatAssistant: React.FC<ArafatAssistantProps> = ({
             onConfirmAction={confirmProposedAction}
             onRejectAction={rejectProposedAction}
             onSelectSuggestedReply={(reply) => sendMessage(reply)}
+            onSpeakMessage={(text, msgId) => speak(text, language.code, msgId)}
+            onStopSpeech={stop}
+            currentSpeakingId={currentMessageId}
             onRetry={() => {
               const lastUserMsg = [...messages].reverse().find((m) => m.role === 'user');
               if (lastUserMsg) {

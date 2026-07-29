@@ -17,6 +17,8 @@ import {
   LogOut,
   Building2,
   BadgeCheck,
+  Settings,
+  LayoutDashboard,
 } from 'lucide-react';
 import { LanguageOption } from '../../data/languages';
 import { CurrencyOption, formatPrice } from '../../data/currencies';
@@ -39,6 +41,7 @@ interface UserProfileModalProps {
   currency: CurrencyOption;
   userProfile: UserProfile;
   onUpdateProfile: (profile: UserProfile) => void;
+  onNavigateView?: (view: string) => void;
 }
 
 export const UserProfileModal: React.FC<UserProfileModalProps> = ({
@@ -48,6 +51,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   currency,
   userProfile,
   onUpdateProfile,
+  onNavigateView,
 }) => {
   const isAr = language.code === 'ar';
 
@@ -308,6 +312,51 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                 )}
               </div>
             </div>
+
+            {/* Central Settings & Dashboard Access Card */}
+            {onNavigateView && (
+              <div className="p-4 bg-gradient-to-r from-[#021A12] via-[#03291F] to-[#01140E] border-2 border-[#D4AF37] rounded-2xl flex items-center justify-between gap-3 shadow-lg">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-[#02130D] border border-[#D4AF37] rounded-xl text-[#D4AF37]">
+                    <Settings className="w-5 h-5 text-[#D4AF37]" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs sm:text-sm font-black text-white">
+                      {isAr ? 'بطاقة الإعدادات المركزية ولوحة التحكم' : 'Central Settings & Dashboard Card'}
+                    </h4>
+                    <p className="text-[11px] text-[#D4AF37]">
+                      {isAr ? 'تفضيلات اللغة، الصوت، العملة، ولوحة تحكم المنصة' : 'Language, audio, currency & platform status'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onNavigateView('settings');
+                    }}
+                    className="px-3 py-2 bg-[#D4AF37] hover:bg-[#F5E5BE] text-[#02130D] font-black text-xs rounded-xl transition-all cursor-pointer shadow-md flex items-center gap-1"
+                  >
+                    <Settings className="w-3.5 h-3.5" />
+                    <span>{isAr ? 'الإعدادات' : 'Settings'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onNavigateView('dashboard');
+                    }}
+                    className="px-3 py-2 bg-[#02130D] border border-[#D4AF37] text-[#D4AF37] hover:bg-[#073D2F] font-black text-xs rounded-xl transition-all cursor-pointer shadow-md flex items-center gap-1"
+                  >
+                    <LayoutDashboard className="w-3.5 h-3.5" />
+                    <span>{isAr ? 'لوحة التحكم' : 'Dashboard'}</span>
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="flex items-center justify-between gap-3 pt-2">
               <button

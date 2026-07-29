@@ -2,16 +2,24 @@ import React, { useState } from 'react';
 import { ArrowLeft, Building2, MapPin, Sparkles, BookOpen, Heart, Compass, CheckCircle2, ShieldCheck, ExternalLink } from 'lucide-react';
 import { LanguageOption } from '../../data/languages';
 
+import { TTSPlayButton } from '../common/TTSPlayButton';
+
 interface ZiyaratTayyibahViewProps {
   language: LanguageOption;
   onBack: () => void;
   onSendToWhatsapp?: (msg: string) => void;
+  onToggleTTS?: (track: { id: string; title: string; text: string; category?: string; subTitle?: string }) => void;
+  currentTTSTrackId?: string;
+  isTTSPlaying?: boolean;
 }
 
 export const ZiyaratTayyibahView: React.FC<ZiyaratTayyibahViewProps> = ({
   language,
   onBack,
   onSendToWhatsapp,
+  onToggleTTS,
+  currentTTSTrackId,
+  isTTSPlaying = false,
 }) => {
   const isAr = language.code === 'ar';
   const [activeTab, setActiveTab] = useState<'prophet_mosque' | 'landmarks' | 'supplications' | 'etiquette'>('prophet_mosque');
@@ -273,17 +281,37 @@ export const ZiyaratTayyibahView: React.FC<ZiyaratTayyibahViewProps> = ({
       {/* Tab 3: Supplications */}
       {activeTab === 'supplications' && (
         <div className="space-y-4">
-          {supplications.map((sup, idx) => (
-            <div key={idx} className="p-4 bg-[#021811] border border-[#D4AF37]/40 rounded-2xl space-y-2">
-              <h4 className="font-bold text-sm text-[#D4AF37] flex items-center gap-2">
-                <BookOpen className="w-4 h-4 text-emerald-400" />
-                <span>{isAr ? sup.titleAr : sup.titleEn}</span>
-              </h4>
-              <p className="text-sm font-semibold text-white leading-loose bg-[#03291F] p-3 rounded-xl border border-[#D4AF37]/20 font-serif">
-                "{isAr ? sup.textAr : sup.textEn}"
-              </p>
-            </div>
-          ))}
+          {supplications.map((sup, idx) => {
+            const trackId = `madinah_sup_${idx}`;
+            return (
+              <div key={idx} className="p-4 bg-[#021811] border border-[#D4AF37]/40 rounded-2xl space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <h4 className="font-bold text-sm text-[#D4AF37] flex items-center gap-2">
+                    <BookOpen className="w-4 h-4 text-emerald-400" />
+                    <span>{isAr ? sup.titleAr : sup.titleEn}</span>
+                  </h4>
+                  {onToggleTTS && (
+                    <TTSPlayButton
+                      trackId={trackId}
+                      title={isAr ? sup.titleAr : sup.titleEn}
+                      text={sup.textAr}
+                      category={isAr ? 'أدعية الزيارة' : 'Madinah Duas'}
+                      isPlaying={isTTSPlaying}
+                      isCurrentTrack={currentTTSTrackId === trackId}
+                      onToggle={onToggleTTS}
+                      variant="pill"
+                      labelAr="استماع بالصوت 🔊"
+                      labelEn="Listen Audio 🔊"
+                      isAr={isAr}
+                    />
+                  )}
+                </div>
+                <p className="text-sm font-semibold text-white leading-loose bg-[#03291F] p-3 rounded-xl border border-[#D4AF37]/20 font-serif">
+                  "{isAr ? sup.textAr : sup.textEn}"
+                </p>
+              </div>
+            );
+          })}
         </div>
       )}
 

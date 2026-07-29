@@ -27,6 +27,7 @@ import {
 import { LANGUAGES, LanguageOption } from '../../data/languages';
 import { CURRENCIES, CurrencyOption } from '../../data/currencies';
 import { useSpeechSynthesis } from '../../hooks/useSpeechSynthesis';
+import { LanguageSwitcher } from '../common/LanguageSwitcher';
 
 interface SettingsViewProps {
   language: LanguageOption;
@@ -440,6 +441,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   }`}
                 />
               </div>
+            </div>
+
+            {/* Featured Languages Quick Bar (Arabic, English, Urdu, French) */}
+            <div className="bg-[#03291F] p-4 rounded-xl border border-[#D4AF37]/30 space-y-2">
+              <div className="text-xs font-bold text-[#D4AF37] flex items-center justify-between">
+                <span>{isAr ? 'اللغات الدولية الرئيسية لضيوف الرحمن (Quick Switcher):' : 'Main International Pilgrim Languages:'}</span>
+                <span className="text-[10px] text-gray-400 font-mono">AR • EN • UR • FR</span>
+              </div>
+              <LanguageSwitcher
+                selectedLang={language}
+                onSelectLang={onSelectLanguage}
+                variant="pills"
+              />
             </div>
 
             {/* Grid of 20 languages */}

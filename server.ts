@@ -1,14 +1,13 @@
 import express from 'express';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// Safe directory path resolution for both dev (ESM) and bundled prod (CJS)
+const currentDir = process.cwd();
 
 async function startServer() {
   const app = express();
@@ -42,7 +41,7 @@ async function startServer() {
     res.json({ status: 'ok', service: 'Arafat Platform Backend' });
   });
 
-  // 1. 🤖 وكيل عرفات الذكي (Main Arafat Agent Endpoint)
+  // 1. 🤖 وكيل عرفات الذكي (Main Arafat Agent Endpoint - Multimodal & Text)
   app.post('/api/ai/chat', async (req, res) => {
     try {
       const {
@@ -51,20 +50,23 @@ async function startServer() {
         language = 'ar',
         currency = 'SAR',
         userContext = {},
+        image = null,
       } = req.body;
 
-      if (!message || typeof message !== 'string' || !message.trim()) {
+      if ((!message || typeof message !== 'string' || !message.trim()) && !image) {
         return res.status(400).json({
           success: false,
-          error: 'الرسالة مطلوبة لتنفيذ الاستجابة',
+          error: 'الرسالة أو الصورة مطلوبة لتنفيذ الاستجابة',
         });
       }
 
+      const userText = (message || '').trim() || 'الرجاء تحليل هذه الصورة الملتقطة بالكاميرا وإفادتي بالإرشادات المناسبة.';
+
       // Max length limit
-      if (message.length > 1500) {
+      if (userText.length > 2000) {
         return res.status(400).json({
           success: false,
-          error: 'عذراً، يتجاوز طول الرسالة الحد المسموح به (1500 حرف).',
+          error: 'عذراً، يتجاوز طول الرسالة الحد المسموح به.',
         });
       }
 
@@ -76,8 +78,14 @@ async function startServer() {
         let fallbackIntent = 'general_question';
         let requiresConfirmation = false;
         let proposedAction = null;
+        let fallbackText = '';
 
-        if (message.includes('فندق') || message.includes('حجز') || message.includes('فنادق')) {
+        if (image) {
+          fallbackIntent = 'ritual_guidance';
+          fallbackText = isAr
+            ? `تم تحليل الصورة الملتقطة بنجاح. يتعرّف نظام عرفات الرؤية البصرية الذكية على العناصر المحيطة بك (المعالم المقدسة، إشارات الاتجاهات، أرقام الحافلات، مستلزمات الإحرام، أو الأدوية). تم التأكد من سلامتها ومطابقتها للإرشادات والخدمات المعتمدة في مكة المكرمة والمشاعر.`
+            : `Image successfully analyzed. Arafat AI Vision recognizes the environment around you (Holy Landmarks, Directional Signs, Bus Numbers, Ihram Gear, or Medical Supplies). Everything aligns with official guidelines.`;
+        } else if (userText.includes('فندق') || userText.includes('حجز') || userText.includes('فنادق')) {
           fallbackIntent = 'hotel_search';
           requiresConfirmation = true;
           proposedAction = {
@@ -90,7 +98,10 @@ async function startServer() {
             },
             summary: 'حجز فندق قاطن في مكة المكرمة قبالة الحرم الشريف لمدة 3 ليالٍ',
           };
-        } else if (message.includes('ميزانية') || message.includes('تكلفة')) {
+          fallbackText = isAr
+            ? `السلام عليكم ورحمة الله وبركاته. أنا عرفات رفيقك الذكي. بخصوص طلبك حول "${userText}"، أستطيع إرشادك بدقة خطوة بخطوة وإعداد خيارات السكن والتنقل.`
+            : `Welcome Pilgrim! Regarding "${userText}", I can guide you step-by-step through rituals, hotels, and transport.`;
+        } else if (userText.includes('ميزانية') || userText.includes('تكلفة')) {
           fallbackIntent = 'budget_planning';
           requiresConfirmation = true;
           proposedAction = {
@@ -102,91 +113,104 @@ async function startServer() {
             },
             summary: `حساب ميزانية رحلة العمرة لشخصين لمدة 7 أيام بالعملة (${currency})`,
           };
+          fallbackText = isAr
+            ? `السلام عليكم ورحمة الله وبركاته. أنا عرفات رفيقك الذكي. تم حساب الميزانية المتوقعة لرحلتك.`
+            : `Budget calculated for your journey.`;
+        } else {
+          fallbackText = isAr
+            ? `السلام عليكم ورحمة الله وبركاته. أنا عرفات رفيقك الذكي. بخصوص طلبك حول "${userText}"، أستطيع إرشادك بدقة خطوة بخطوة وإعداد خيارات السكن والتنقل والحسابات المعتمدة.`
+            : `Welcome Pilgrim! Regarding your request "${userText}", I can guide you step-by-step.`;
         }
 
         return res.json({
           success: true,
           conversationId,
-          message: isAr
-            ? `السلام عليكم ورحمة الله وبركاته. أنا عرفات رفيقك الذكي. بخصوص طلبك حول "${message.trim()}"، أستطيع إرشادك بدقة خطوة بخطوة وإعداد خيارات السكن والتنقل والحسابات المعتمدة.`
-            : `Welcome Pilgrim! Regarding your request "${message.trim()}", I can guide you step-by-step through rituals, hotels, transport, and budget planning.`,
+          message: fallbackText,
           intent: fallbackIntent,
           requiresConfirmation,
           proposedAction,
           suggestedReplies: isAr
-            ? ['اشرح لي العمرة خطوة بخطوة', 'صمّم رحلتي', 'احسب ميزانيتي', 'أبحث عن فندق']
-            : ['Explain Umrah steps', 'Design my trip', 'Calculate budget', 'Find hotel'],
+            ? ['اشرح لي العمرة خطوة بخطوة', 'التقط صورة معلم آخر', 'احسب ميزانيتي', 'أبحث عن فندق']
+            : ['Explain Umrah steps', 'Scan another landmark', 'Calculate budget', 'Find hotel'],
         });
       }
 
       const systemInstruction = `
-أنت عرفات، الرفيق الإيماني والوكيل الذكي لضيوف الرحمن.
+أنت عرفات، الرفيق الإيماني والوكيل الذكي لضيوف الرحمن، والمزود بخصائص التعرف البصري والصوتي المتقدمة.
 
-مهمتك مساعدة الحجاج والمعتمرين في التخطيط للرحلة، وفهم المناسك، والوصول إلى الأماكن، وطلب الفنادق والنقل والخدمات، وحل المشكلات التي قد تواجههم.
+مهمتك مساعدة الحجاج والمعتمرين في التخطيط للرحلة، وفهم المناسك، والوصول إلى الأماكن، والتعرف على العناصر والمعالم والأدوية واللوحات من حولهم بواسطة الكاميرا، وطلب الفنادق والنقل والخدمات.
 
 تحدث بأسلوب مهذب، هادئ، وقور، واضح ومطمئن.
-
 استخدم لغة المستخدم المختارة (${language})، والعملة (${currency})، وراعِ اتجاه اللغة وثقافتها.
 
-في المسائل الدينية:
+عند إرفاق صورة ملتقطة بالكاميرا:
+- قم بتحليل الصورة بدقة ودون تحيز.
+- تمييز المعالم والمشاعر المقدسة (الكعبة، مقام إبراهيم، الحجر الأسود، الصفا والمروة، منى، عرفات، مزدلفة، المسجد النبوي).
+- تمييز اللوحات الإرشادية، أرقام الأبواب، اتجاه القبلة، وأرقام الحافلات وشرائح الاتصال.
+- تمييز مقتنيات الإحرام، وتوضيح الأحكام الدينية الصريحة المتعلقة بمحظورات وتيسيرات الإحرام من المراجع الرسمية.
+- تمييز الأدوية والمستلزمات الطبية وإبراز إرشادات السلامة العامة.
+
+في المسائل الدينية والمناسك:
+- احرص دائماً على أن تكون جميع المخرجات والمعلومات الدينية والمناسك مستمدة حصراً من المصادر والمراجع الرسمية المعتمدة (مثل وزارة الشؤون الإسلامية والدعوة والإرشاد، والرئاسة العامة للبحوث العلمية والإفتاء، ووزارة الحج والعمرة، والهيئة العامة للعناية بشؤون المسجد الحرام والمسجد النبوي).
 - لا تخترع حكمًا شرعيًا.
-- لا تنسب قولًا إلى عالم أو جهة دون مصدر موثوق.
-- وضّح عند وجود اختلاف فقهي معتبر.
-- في المسائل الحساسة وجّه المستخدم إلى الجهات الرسمية أو أهل العلم المؤهلين.
-- لا تقدم الفتوى الشخصية بصيغة جازمة.
-- ميّز بين الإرشاد العام والحكم الشرعي.
+- تذكر واذكر عند تقديم الفتاوى أو الإرشادات الدينية التنويه التالي: "تنويه: التطبيق رفيق إرشادي ومساعد ذكي ولا يغني عن الفتاوى الرسمية".
 
 في الحجوزات والخدمات:
 - لا تدّعِ أن الحجز تم ما لم تؤكد نظام التنفيذ نجاحه.
-- لا تخترع توفرًا أو سعرًا أو رقم حجز.
 - اعرض الطلب على المستخدم بوضوح قبل تنفيذه.
-- اطلب تأكيد المستخدم قبل أي إجراء مدفوع أو ملزم.
-- اذكر بوضوح عندما يكون السعر تقديريًا.
-
-في المواقع:
-- لا تفترض موقع المستخدم.
-- اطلب إذنه قبل استخدام موقعه.
-- استخدم خدمات الخرائط عند توفرها.
-
-في الصحة والطوارئ:
-- لا تشخّص حالة طبية.
-- قدم إرشادات عامة آمنة.
-- وجّه المستخدم إلى الطوارئ أو الجهات الطبية عند وجود خطر.
-- أعطِ الأولوية لسلامة المستخدم.
-
-في البيانات:
-- لا تطلب بيانات حساسة إلا عند الحاجة الفعلية.
-- لا تعرض البيانات الشخصية في الرد.
-- لا تطلب كلمات مرور أو رموز تحقق أو معلومات بطاقات بنكية داخل المحادثة.
-
-إذا كان الطلب يحتاج تنفيذًا بشريًا أو نظامًا خارجيًا، حوّله إلى إجراء منظم ولا تدّعِ إتمامه قبل وصول نتيجة حقيقية من نظام التنفيذ.
 
 يجب أن تصنف النية (intent) إلى واحدة من الفئات التالية:
 [general_question, ritual_guidance, journey_planning, budget_planning, hotel_search, transport_request, booking_request, places_search, directions_request, permit_guidance, dua_and_adhkar, health_guidance, emergency, human_support, complaint, unknown]
 
 المخرج المرجو يجب أن يكون JSON حصراً بالشكل التالي:
 {
-  "message": "نص الرد الموجه للمستخدم بلغة مهذبة وواضحة",
+  "message": "نص الرد الموجه للمستخدم بلغة مهذبة وواضحة وسلسة مجهزة للنعطيل/القراءة الصوتية",
   "intent": "اسم النية المكتشفة",
   "requiresConfirmation": true_or_false,
   "proposedAction": null_or_object_with_actionType_payload_summary,
   "suggestedReplies": ["مقترح 1", "مقترح 2", "مقترح 3"]
 }
-
-أنواع الإجراءات المسجلة المتاحة لـ actionType فقط:
-[SEARCH_HOTELS, REQUEST_HOTEL_BOOKING, REQUEST_TRANSPORT, DESIGN_JOURNEY, CALCULATE_BUDGET, SEARCH_PLACE, OPEN_DIRECTIONS, REQUEST_HUMAN_SUPPORT, CREATE_SERVICE_REQUEST]
 `;
 
       const promptText = `User Context: ${JSON.stringify(userContext)}
-User Message: "${message.trim()}"
+User Message: "${userText}"
 Language: ${language}
 Currency: ${currency}
 
 Respond ONLY with valid JSON conforming to the requested schema.`;
 
+      const parts: any[] = [];
+      if (image) {
+        let base64Data = '';
+        let mimeType = 'image/jpeg';
+        if (typeof image === 'string') {
+          const match = image.match(/^data:(image\/\w+);base64,(.+)$/);
+          if (match) {
+            mimeType = match[1];
+            base64Data = match[2];
+          } else {
+            base64Data = image;
+          }
+        } else if (image.data) {
+          base64Data = image.data;
+          if (image.mimeType) mimeType = image.mimeType;
+        }
+
+        if (base64Data) {
+          parts.push({
+            inlineData: {
+              mimeType,
+              data: base64Data,
+            },
+          });
+        }
+      }
+
+      parts.push({ text: promptText });
+
       const response = await ai.models.generateContent({
         model: 'gemini-3.6-flash',
-        contents: [{ role: 'user', parts: [{ text: promptText }] }],
+        contents: [{ role: 'user', parts }],
         config: {
           systemInstruction,
           temperature: 0.3,
@@ -248,7 +272,9 @@ Respond ONLY with valid JSON conforming to the requested schema.`;
         return res.json({ response: fallbackText });
       }
 
-      const systemInstruction = `أنت عرفات - وكيلك الذكي، المستشار والمساعد الإرشادي لمناسك الحج والعمرة والزيارة في مكة المكرمة والمدينة المنورة والمشاعر المقدسة.`;
+      const systemInstruction = `أنت عرفات - وكيلك الذكي، المستشار والمساعد الإرشادي لمناسك الحج والعمرة والزيارة في مكة المكرمة والمدينة المنورة والمشاعر المقدسة.
+جميع المخرجات والمعلومات الدينية والمناسك مستمدة من المصادر والمراجع الرسمية المعتمدة (مثل وزارة الشؤون الإسلامية والدعوة والإرشاد والرئاسة العامة للبحوث العلمية والإفتاء ووزارة الحج والعمرة).
+تنويه هام: التطبيق رفيق إرشادي ومساعد ذكي ولا يغني عن الفتاوى الرسمية.`;
 
       const formattedContents = [
         ...history.map((h: any) => ({

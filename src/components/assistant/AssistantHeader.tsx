@@ -6,6 +6,7 @@ import { ArafatLogo } from '../common/ArafatLogo';
 interface AssistantHeaderProps {
   language: LanguageOption;
   isMuted: boolean;
+  isSpeaking?: boolean;
   onToggleMute: () => void;
   onClearChat: () => void;
   onRequestHumanSupport: () => void;
@@ -15,6 +16,7 @@ interface AssistantHeaderProps {
 export const AssistantHeader: React.FC<AssistantHeaderProps> = ({
   language,
   isMuted,
+  isSpeaking = false,
   onToggleMute,
   onClearChat,
   onRequestHumanSupport,
@@ -36,6 +38,12 @@ export const AssistantHeader: React.FC<AssistantHeaderProps> = ({
             <span className="px-2 py-0.5 rounded-full bg-[#D4AF37]/20 border border-[#D4AF37]/60 text-[10px] font-bold text-[#D4AF37]">
               {isAr ? 'مباشر' : 'Live'}
             </span>
+            {isSpeaking && (
+              <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/60 text-[10px] font-bold text-emerald-300 animate-pulse">
+                <Volume2 className="w-3 h-3 text-emerald-400 animate-bounce" />
+                <span>{isAr ? 'يتحدث الآن...' : 'Speaking...'}</span>
+              </span>
+            )}
           </div>
           <p className="text-xs text-[#D4AF37]/90 font-medium hidden sm:block">
             {isAr ? 'رفيقك الإيماني والمساعد التفاعلي الشامل لضيوف الرحمن' : 'Your spiritual interactive companion for Pilgrims'}

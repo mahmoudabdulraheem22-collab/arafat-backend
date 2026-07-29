@@ -1,6 +1,6 @@
 {
   "name": "وطهر بيتي - منصة رقمية لتكون معك لحظة بلحظة",
   "description": "منصة رقمية لتكون معك لحظة بلحظة لخدمة حجاج بيت الله الحرام والمعتمرين والزوار",
-  "requestFramePermissions": [],
+  "requestFramePermissions": ["camera", "microphone", "geolocation"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

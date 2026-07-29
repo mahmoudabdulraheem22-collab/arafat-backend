@@ -13,21 +13,37 @@ import {
   HardDriveDownload,
   Wifi,
   Headphones,
+  ShieldAlert,
 } from 'lucide-react';
 import { LanguageOption } from '../../data/languages';
 import { saveToCache, getFromCache, CACHE_KEYS } from '../../utils/offlineStorage';
 import { RitualAudioPlayer } from '../common/RitualAudioPlayer';
 
+import { JourneyTrackerView } from './JourneyTrackerView';
+import { VisualRitualGuides } from '../common/VisualRitualGuides';
+
+import { TTSPlayButton } from '../common/TTSPlayButton';
+
 interface RitualsGuideViewProps {
   language: LanguageOption;
   onBack: () => void;
   onSendToWhatsapp?: (message: string) => void;
+  onToggleTTS?: (track: { id: string; title: string; text: string; category?: string; subTitle?: string }) => void;
+  currentTTSTrackId?: string;
+  isTTSPlaying?: boolean;
 }
 
-export const RitualsGuideView: React.FC<RitualsGuideViewProps> = ({ language, onBack, onSendToWhatsapp }) => {
+export const RitualsGuideView: React.FC<RitualsGuideViewProps> = ({
+  language,
+  onBack,
+  onSendToWhatsapp,
+  onToggleTTS,
+  currentTTSTrackId,
+  isTTSPlaying = false,
+}) => {
   const isAr = language.code === 'ar';
 
-  const [activeTab, setActiveTab] = useState<'umrah' | 'tawaf_counter' | 'hajj' | 'arafat' | 'mina' | 'audio_guide'>('audio_guide');
+  const [activeTab, setActiveTab] = useState<'visual_guide' | 'journey_tracker' | 'audio_guide' | 'tawaf_counter' | 'umrah' | 'hajj' | 'arafat' | 'mina'>('visual_guide');
   
   // Interactive Lap Counters initialized from offline cache
   const cachedRituals = getFromCache<{ tawafLap: number; saiLap: number }>(CACHE_KEYS.RITUALS_COUNTER, {
@@ -84,10 +100,32 @@ export const RitualsGuideView: React.FC<RitualsGuideViewProps> = ({ language, on
         </div>
       </div>
 
+      {/* Official Accredited Sources & Disclaimer Banner */}
+      <div className="bg-[#03291F] border border-[#D4AF37]/50 rounded-2xl p-3.5 mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-inner">
+        <div className="flex items-start gap-2.5">
+          <ShieldAlert className="w-5 h-5 text-[#D4AF37] shrink-0 mt-0.5" />
+          <div>
+            <span className="text-xs font-bold text-[#D4AF37] block">
+              {isAr ? 'المصادر والمراجع الرسمية المعتمدة:' : 'Official Accredited Sources:'}
+            </span>
+            <p className="text-xs text-[#F8F3E7]/85 mt-0.5 leading-relaxed">
+              {isAr
+                ? 'جميع المخرجات والمعلومات الدينية والمناسك الواردة في التطبيق مستمدة من المصادر والمراجع الرسمية المعتمدة (وزارة الشؤون الإسلامية والدعوة والإرشاد، والرئاسة العامة للبحوث العلمية والإفتاء، ووزارة الحج والعمرة).'
+                : 'All religious guidance & Hajj/Umrah rituals are derived from official accredited sources (Ministry of Islamic Affairs, General Presidency of Ifta, and Ministry of Hajj & Umrah).'}
+            </p>
+          </div>
+        </div>
+        <div className="shrink-0 bg-[#01140E] px-3 py-1.5 rounded-xl border border-[#D4AF37]/40 text-[11px] font-bold text-[#D4AF37]">
+          <span>{isAr ? 'تنويه: رفيق إرشادي ومساعد ذكي ولا يغني عن الفتاوى الرسمية' : 'Smart guidance companion, not a substitute for official fatwas'}</span>
+        </div>
+      </div>
+
       {/* Tabs */}
       <div className="flex flex-wrap items-center gap-2 mb-6 border-b border-[#D4AF37]/20 pb-3">
         {[
-          { id: 'audio_guide', titleAr: '🎧 الأدلة الصوتية للمناسك (أوفلاين)', titleEn: '🎧 Audio Guides (Offline)' },
+          { id: 'visual_guide', titleAr: '📸 الدليل البصري التوضيحي', titleEn: '📸 Visual Illustrated Guide' },
+          { id: 'journey_tracker', titleAr: '✅ مُتتبّع خطوات المناسك', titleEn: '✅ Journey Progress Tracker' },
+          { id: 'audio_guide', titleAr: '🎧 الأدلة الصوتية للمناسك', titleEn: '🎧 Audio Guides' },
           { id: 'tawaf_counter', titleAr: 'عداد الطواف والسعي الذكي', titleEn: 'Tawaf & Sa\'i Counter' },
           { id: 'umrah', titleAr: 'صفة العمرة خطوة بخطوة', titleEn: 'Umrah Steps' },
           { id: 'hajj', titleAr: 'مناسك الحج اليومية', titleEn: 'Hajj Guide' },
@@ -109,6 +147,21 @@ export const RitualsGuideView: React.FC<RitualsGuideViewProps> = ({ language, on
       </div>
 
       {/* Content Area */}
+      {activeTab === 'visual_guide' && (
+        <VisualRitualGuides
+          language={language}
+          onToggleTTS={onToggleTTS}
+          currentTTSTrackId={currentTTSTrackId}
+          isTTSPlaying={isTTSPlaying}
+        />
+      )}
+      {activeTab === 'journey_tracker' && (
+        <JourneyTrackerView
+          language={language}
+          onBack={onBack}
+          onSendToWhatsapp={onSendToWhatsapp}
+        />
+      )}
       {activeTab === 'audio_guide' && (
         <RitualAudioPlayer
           language={language}
@@ -134,13 +187,30 @@ export const RitualsGuideView: React.FC<RitualsGuideViewProps> = ({ language, on
               </div>
 
               {/* Dua Box for Current Lap */}
-              <div className="bg-[#02130D] border border-[#D4AF37]/40 p-4 rounded-xl text-center my-4 min-h-[100px] flex flex-col justify-center">
-                <span className="text-[10px] text-[#D4AF37] font-bold block mb-1">
+              <div className="bg-[#02130D] border border-[#D4AF37]/40 p-4 rounded-xl text-center my-4 min-h-[100px] flex flex-col items-center justify-center space-y-2">
+                <span className="text-[10px] text-[#D4AF37] font-bold block">
                   {isAr ? `الدعاء المستحب للشوط ${tawafLap}:` : `Recommended Dua for Lap ${tawafLap}:`}
                 </span>
-                <p className="text-xs text-[#F8F3E7] font-serif leading-relaxed">
+                <p className="text-xs sm:text-sm text-[#F8F3E7] font-serif leading-relaxed">
                   "{tawafDuas[tawafLap - 1]?.dua}"
                 </p>
+                {onToggleTTS && (
+                  <div className="pt-1">
+                    <TTSPlayButton
+                      trackId={`tawaf_lap_${tawafLap}`}
+                      title={isAr ? `دعاء شوط الطواف ${tawafLap}` : `Tawaf Lap ${tawafLap} Dua`}
+                      text={tawafDuas[tawafLap - 1]?.dua || ''}
+                      category={isAr ? 'أدعية الطواف' : 'Tawaf Duas'}
+                      isPlaying={isTTSPlaying}
+                      isCurrentTrack={currentTTSTrackId === `tawaf_lap_${tawafLap}`}
+                      onToggle={onToggleTTS}
+                      variant="pill"
+                      labelAr="استماع لدعاء الشوط 🔊"
+                      labelEn="Listen Lap Dua 🔊"
+                      isAr={isAr}
+                    />
+                  </div>
+                )}
               </div>
             </div>
 
@@ -179,13 +249,30 @@ export const RitualsGuideView: React.FC<RitualsGuideViewProps> = ({ language, on
               </div>
 
               {/* Dua Box for Sa'i */}
-              <div className="bg-[#02130D] border border-[#D4AF37]/40 p-4 rounded-xl text-center my-4 min-h-[100px] flex flex-col justify-center">
-                <span className="text-[10px] text-[#D4AF37] font-bold block mb-1">
+              <div className="bg-[#02130D] border border-[#D4AF37]/40 p-4 rounded-xl text-center my-4 min-h-[100px] flex flex-col items-center justify-center space-y-2">
+                <span className="text-[10px] text-[#D4AF37] font-bold block">
                   {isAr ? 'الدعاء المأثور عند الصفا والمروة:' : 'Recommended Dua:'}
                 </span>
-                <p className="text-xs text-[#F8F3E7] font-serif leading-relaxed">
+                <p className="text-xs sm:text-sm text-[#F8F3E7] font-serif leading-relaxed">
                   "إِنَّ الصَّفَا وَالْمَرُوَةَ مِن شَعَائِرِ اللَّهِ ۖ أَبْدَأُ بِمَا بَدَأَ اللَّهُ بِهِ."
                 </p>
+                {onToggleTTS && (
+                  <div className="pt-1">
+                    <TTSPlayButton
+                      trackId={`sai_lap_${saiLap}`}
+                      title={isAr ? `دعاء شوط السعي ${saiLap}` : `Sa'i Lap ${saiLap} Dua`}
+                      text="إِنَّ الصَّفَا وَالْمَرُوَةَ مِن شَعَائِرِ اللَّهِ ۖ أَبْدَأُ بِمَا بَدَأَ اللَّهُ بِهِ."
+                      category={isAr ? 'أدعية السعي' : 'Sa\'i Duas'}
+                      isPlaying={isTTSPlaying}
+                      isCurrentTrack={currentTTSTrackId === `sai_lap_${saiLap}`}
+                      onToggle={onToggleTTS}
+                      variant="pill"
+                      labelAr="استماع لدعاء السعي 🔊"
+                      labelEn="Listen Sa'i Dua 🔊"
+                      isAr={isAr}
+                    />
+                  </div>
+                )}
               </div>
             </div>
 
@@ -218,14 +305,33 @@ export const RitualsGuideView: React.FC<RitualsGuideViewProps> = ({ language, on
             { step: '4', titleAr: 'السعي بين الصفا والمروة (7 أشواط)', titleEn: 'Sa\'i between Safa & Marwah (7 Laps)', textAr: 'البدء بالصفا والختام بالمروة مع الذكر المأثور والدعاء.' },
             { step: '5', titleAr: 'الحلق أو التقصير', titleEn: 'Halq or Taqsir (Hair Cutting)', textAr: 'الحلق للرجال كلياً أو تقصير جميع شعر الرأس، والتقصير للنساء قدر أنملة.' },
           ].map((item) => (
-            <div key={item.step} className="p-4 rounded-2xl bg-[#03291F] border border-[#D4AF37]/40 flex gap-4 items-start">
-              <div className="w-8 h-8 rounded-full bg-[#D4AF37] text-[#02130D] font-black flex items-center justify-center shrink-0 text-sm">
-                {item.step}
+            <div key={item.step} className="p-4 rounded-2xl bg-[#03291F] border border-[#D4AF37]/40 flex flex-col sm:flex-row items-start justify-between gap-4">
+              <div className="flex gap-4 items-start">
+                <div className="w-8 h-8 rounded-full bg-[#D4AF37] text-[#02130D] font-black flex items-center justify-center shrink-0 text-sm">
+                  {item.step}
+                </div>
+                <div>
+                  <h4 className="font-bold text-[#D4AF37] text-sm mb-1">{isAr ? item.titleAr : item.titleEn}</h4>
+                  <p className="text-xs text-[#F8F3E7]/80 leading-relaxed">{item.textAr}</p>
+                </div>
               </div>
-              <div>
-                <h4 className="font-bold text-[#D4AF37] text-sm mb-1">{isAr ? item.titleAr : item.titleEn}</h4>
-                <p className="text-xs text-[#F8F3E7]/80 leading-relaxed">{item.textAr}</p>
-              </div>
+              {onToggleTTS && (
+                <div className="shrink-0 self-end sm:self-center">
+                  <TTSPlayButton
+                    trackId={`umrah_step_${item.step}`}
+                    title={isAr ? item.titleAr : item.titleEn}
+                    text={item.textAr}
+                    category={isAr ? 'صفة العمرة' : 'Umrah Steps'}
+                    isPlaying={isTTSPlaying}
+                    isCurrentTrack={currentTTSTrackId === `umrah_step_${item.step}`}
+                    onToggle={onToggleTTS}
+                    variant="pill"
+                    labelAr="استماع للتوجيه 🔊"
+                    labelEn="Listen Audio 🔊"
+                    isAr={isAr}
+                  />
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -240,14 +346,33 @@ export const RitualsGuideView: React.FC<RitualsGuideViewProps> = ({ language, on
             { day: '10 ذو الحجة', titleAr: 'يوم النحر (عيد الأضحى)', textAr: 'رمي جمرة العقبة الكبرى بـ 7 حصيات، ذبح الهدي، الحلق أو التقصير، وطواف الإفاضة والسعي.' },
             { day: '11-13 ذو الحجة', titleAr: 'أيام التشريق بمنى', textAr: 'المبيت بمنى ورمي الجمرات الثلاث (الصغرى، الوسطى، العقبة) بعد الزوال كل يوم بـ 7 حصيات.' },
           ].map((item, idx) => (
-            <div key={idx} className="p-4 rounded-2xl bg-[#03291F] border border-[#D4AF37]/40 flex gap-4 items-start">
-              <div className="px-3 py-1 rounded-full bg-[#D4AF37]/20 border border-[#D4AF37] text-[#D4AF37] font-black text-xs shrink-0">
-                {item.day}
+            <div key={idx} className="p-4 rounded-2xl bg-[#03291F] border border-[#D4AF37]/40 flex flex-col sm:flex-row items-start justify-between gap-4">
+              <div className="flex gap-4 items-start">
+                <div className="px-3 py-1 rounded-full bg-[#D4AF37]/20 border border-[#D4AF37] text-[#D4AF37] font-black text-xs shrink-0">
+                  {item.day}
+                </div>
+                <div>
+                  <h4 className="font-bold text-[#D4AF37] text-sm mb-1">{item.titleAr}</h4>
+                  <p className="text-xs text-[#F8F3E7]/80 leading-relaxed">{item.textAr}</p>
+                </div>
               </div>
-              <div>
-                <h4 className="font-bold text-[#D4AF37] text-sm mb-1">{item.titleAr}</h4>
-                <p className="text-xs text-[#F8F3E7]/80 leading-relaxed">{item.textAr}</p>
-              </div>
+              {onToggleTTS && (
+                <div className="shrink-0 self-end sm:self-center">
+                  <TTSPlayButton
+                    trackId={`hajj_step_${idx}`}
+                    title={item.titleAr}
+                    text={item.textAr}
+                    category={isAr ? 'مناسك الحج' : 'Hajj Guide'}
+                    isPlaying={isTTSPlaying}
+                    isCurrentTrack={currentTTSTrackId === `hajj_step_${idx}`}
+                    onToggle={onToggleTTS}
+                    variant="pill"
+                    labelAr="استماع للتوجيه 🔊"
+                    labelEn="Listen Audio 🔊"
+                    isAr={isAr}
+                  />
+                </div>
+              )}
             </div>
           ))}
         </div>

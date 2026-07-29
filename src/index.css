@@ -1,1 +1,25 @@
 @import "tailwindcss";
+
+/* نمط القراءة المريح لضيوف الرحمن (تكبير الخط وزيادة التباعد) */
+.reading-mode-active p,
+.reading-mode-active .card-desc,
+.reading-mode-active span.text-sm,
+.reading-mode-active span.text-xs,
+.reading-mode-active p.text-xs,
+.reading-mode-active p.text-sm,
+.reading-mode-active p.text-base,
+.reading-mode-active li {
+  font-size: 1.1em !important;
+  line-height: 2.1 !important;
+  letter-spacing: 0.025em !important;
+}
+
+.reading-mode-active h1,
+.reading-mode-active h2,
+.reading-mode-active h3,
+.reading-mode-active h4,
+.reading-mode-active h5 {
+  line-height: 1.7 !important;
+  letter-spacing: 0.02em !important;
+}
+

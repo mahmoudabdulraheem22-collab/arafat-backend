@@ -45,9 +45,14 @@ export const ContactUsModal: React.FC<ContactUsModalProps> = ({
 
   const subjects = [
     { id: 'general', ar: 'استفسار عام', en: 'General Inquiry' },
-    { id: 'support', ar: 'الدعم الميداني والحجوزات', en: 'Field Support & Bookings' },
-    { id: 'fatwa', ar: 'الفتاوى وأحكام المناسك', en: 'Fatwa & Ritual Guidance' },
-    { id: 'suggestion', ar: 'مقترحات وملاحظات', en: 'Suggestions & Feedback' },
+    { id: 'flight', ar: 'حجوزات الطيران', en: 'Flight Bookings' },
+    { id: 'hotel', ar: 'حجوزات الفنادق والسكن', en: 'Hotel & Accommodation Bookings' },
+    { id: 'transport', ar: 'خدمات النقل والمواصلات', en: 'Transportation Services' },
+    { id: 'dining', ar: 'دليل المطاعم والإعاشة', en: 'Dining & Catering Guide' },
+    { id: 'medical', ar: 'الخدمات الطبية والمستشفيات', en: 'Medical & Hospital Services' },
+    { id: 'development', ar: 'اقتراحات للتطوير', en: 'Development Suggestions' },
+    { id: 'complaints', ar: 'ملاحظات أو شكاوى', en: 'Feedback & Complaints' },
+    { id: 'other', ar: 'أخرى', en: 'Other' },
   ];
 
   const handleSubmit = (e: React.FormEvent) => {

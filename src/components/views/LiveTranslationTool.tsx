@@ -92,28 +92,45 @@ export const LiveTranslationTool: React.FC<LiveTranslationToolProps> = ({
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
       if (isListening && recognitionRef.current) {
-        recognitionRef.current.stop();
+        try {
+          recognitionRef.current.stop();
+        } catch {
+          // ignore
+        }
         setIsListening(false);
         return;
       }
 
-      recognitionRef.current = new SpeechRecognition();
-      recognitionRef.current.lang = sourceLang.code === 'ar' ? 'ar-SA' : `${sourceLang.code}-US`;
-      recognitionRef.current.interimResults = false;
+      try {
+        recognitionRef.current = new SpeechRecognition();
+        recognitionRef.current.lang = sourceLang.code === 'ar' ? 'ar-SA' : `${sourceLang.code}-US`;
+        recognitionRef.current.interimResults = false;
 
-      recognitionRef.current.onstart = () => setIsListening(true);
-      recognitionRef.current.onresult = (e: any) => {
-        const transcript = e.results[0][0].transcript;
-        if (transcript) {
-          setInputText(transcript);
-          handleTranslate(transcript);
-        }
+        recognitionRef.current.onstart = () => setIsListening(true);
+        recognitionRef.current.onresult = (e: any) => {
+          const transcript = e.results[0][0].transcript;
+          if (transcript) {
+            setInputText(transcript);
+            handleTranslate(transcript);
+          }
+          setIsListening(false);
+        };
+        recognitionRef.current.onerror = (e: any) => {
+          setIsListening(false);
+          const errType = e?.error || '';
+          if (errType === 'not-allowed' || errType === 'service-not-allowed') {
+            alert(isAr ? 'يرجى السماح بالوصول للميكروفون لاستخدام الإدخال الصوتي.' : 'Please enable microphone access in browser settings.');
+          }
+        };
+        recognitionRef.current.onend = () => setIsListening(false);
+
+        recognitionRef.current.start();
+      } catch (err: any) {
         setIsListening(false);
-      };
-      recognitionRef.current.onerror = () => setIsListening(false);
-      recognitionRef.current.onend = () => setIsListening(false);
-
-      recognitionRef.current.start();
+        if (err?.name === 'NotAllowedError' || err?.message?.includes('not-allowed')) {
+          alert(isAr ? 'يرجى إعطاء إذن الميكروفون لاستخدام الترجمة الصوتية' : 'Microphone permission denied');
+        }
+      }
     } else {
       alert(isAr ? 'التعرف على الصوت غير مدعوم في متصفحك' : 'Voice recognition not supported');
     }

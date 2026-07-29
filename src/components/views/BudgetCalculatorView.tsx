@@ -12,9 +12,12 @@ import {
   ArrowRight,
   ShieldCheck,
   RefreshCw,
+  PieChart,
+  PlusCircle,
 } from 'lucide-react';
 import { CurrencyOption, formatPrice } from '../../data/currencies';
 import { LanguageOption } from '../../data/languages';
+import { HajjExpenseTracker } from '../budget/HajjExpenseTracker';
 
 interface BudgetCalculatorViewProps {
   currency: CurrencyOption;
@@ -31,7 +34,10 @@ export const BudgetCalculatorView: React.FC<BudgetCalculatorViewProps> = ({
 }) => {
   const isAr = language.code === 'ar';
 
-  // Form State
+  // Active Sub-Tab: 'live_tracker' (Live Expense Tracker) vs 'planner' (Pre-Trip Calculator)
+  const [activeTab, setActiveTab] = useState<'live_tracker' | 'planner'>('live_tracker');
+
+  // Form State for Pre-Trip Planner
   const [days, setDays] = useState<number>(7);
   const [people, setPeople] = useState<number>(2);
   const [accommodation, setAccommodation] = useState<'luxury' | 'central' | 'standard' | 'economy'>('central');
@@ -97,7 +103,7 @@ export const BudgetCalculatorView: React.FC<BudgetCalculatorViewProps> = ({
   return (
     <div className="w-full max-w-5xl mx-auto p-4 sm:p-6 bg-[#021811]/95 text-[#F8F3E7] rounded-3xl border-2 border-[#D4AF37] shadow-[0_20px_50px_rgba(0,0,0,0.9)] my-6">
       {/* Header Bar */}
-      <div className="flex items-center justify-between border-b border-[#D4AF37]/30 pb-4 mb-6">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-[#D4AF37]/30 pb-4 mb-6 gap-4">
         <button
           onClick={onBack}
           className="flex items-center gap-2 px-4 py-2 rounded-full border border-[#D4AF37]/60 bg-[#03291F] hover:bg-[#073D2F] text-[#D4AF37] transition-all text-sm font-bold cursor-pointer"
@@ -112,10 +118,10 @@ export const BudgetCalculatorView: React.FC<BudgetCalculatorViewProps> = ({
           </div>
           <div>
             <h2 className="text-xl sm:text-2xl font-black text-[#D4AF37]">
-              {isAr ? 'خطتي وميزانيتي قبل الرحلة' : 'My Trip Budget Plan'}
+              {isAr ? 'إدارة ومتابعة ميزانية الحج' : 'Hajj Budget & Expense Manager'}
             </h2>
             <p className="text-xs text-[#F8F3E7]/70">
-              {isAr ? 'حساب تكاليف الإقامة والنقل والإعاشة بالعملة المحددة' : 'Calculate stay, transport & meals in selected currency'}
+              {isAr ? 'تتبع مصاريف التنقل والطعام والهدايا مباشرة وحساب التكاليف المتوقعة' : 'Log transport, food, and gift expenses & estimate trip budgets'}
             </p>
           </div>
         </div>
@@ -125,6 +131,43 @@ export const BudgetCalculatorView: React.FC<BudgetCalculatorViewProps> = ({
         </div>
       </div>
 
+      {/* Sub-Tabs: Live Tracker vs Pre-Trip Planner */}
+      <div className="flex items-center justify-center gap-2 p-1.5 bg-[#03291F] border border-[#D4AF37]/40 rounded-2xl mb-6 max-w-xl mx-auto">
+        <button
+          type="button"
+          onClick={() => setActiveTab('live_tracker')}
+          className={`flex-1 py-2.5 px-3 rounded-xl font-black text-xs flex items-center justify-center gap-2 transition-all cursor-pointer ${
+            activeTab === 'live_tracker'
+              ? 'bg-[#D4AF37] text-[#02130D] shadow-[0_0_15px_rgba(212,175,55,0.4)]'
+              : 'text-[#F8F3E7]/80 hover:text-white hover:bg-[#073D2F]'
+          }`}
+        >
+          <PieChart className="w-4 h-4" />
+          <span>{isAr ? 'متتبع المصاريف المباشر (تفاعلي)' : 'Live Expense Tracker'}</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('planner')}
+          className={`flex-1 py-2.5 px-3 rounded-xl font-black text-xs flex items-center justify-center gap-2 transition-all cursor-pointer ${
+            activeTab === 'planner'
+              ? 'bg-[#D4AF37] text-[#02130D] shadow-[0_0_15px_rgba(212,175,55,0.4)]'
+              : 'text-[#F8F3E7]/80 hover:text-white hover:bg-[#073D2F]'
+          }`}
+        >
+          <Calculator className="w-4 h-4" />
+          <span>{isAr ? 'حاسبة التكاليف والخطة المسبقة' : 'Pre-Trip Planner'}</span>
+        </button>
+      </div>
+
+      {/* Active Tab Content */}
+      {activeTab === 'live_tracker' ? (
+        <HajjExpenseTracker
+          currency={currency}
+          language={language}
+          onSendToWhatsapp={onSendToWhatsapp}
+        />
+      ) : (
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Form Controls */}
         <div className="lg:col-span-7 space-y-5">
@@ -338,6 +381,7 @@ export const BudgetCalculatorView: React.FC<BudgetCalculatorViewProps> = ({
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 };

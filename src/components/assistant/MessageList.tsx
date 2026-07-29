@@ -3,7 +3,7 @@ import { ChatMessage } from '../../types/assistant';
 import { ArafatLogo } from '../common/ArafatLogo';
 import { ActionProposalCard } from './ActionProposalCard';
 import { RequestStatusCard } from './RequestStatusCard';
-import { Bot, User, Sparkles, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
+import { Bot, User, Sparkles, Loader2, AlertCircle, RefreshCw, Volume2, VolumeX } from 'lucide-react';
 
 interface MessageListProps {
   messages: ChatMessage[];
@@ -14,6 +14,9 @@ interface MessageListProps {
   onRejectAction?: (messageId: string) => void;
   onSelectSuggestedReply?: (replyText: string) => void;
   onRetry?: () => void;
+  onSpeakMessage?: (text: string, messageId: string) => void;
+  onStopSpeech?: () => void;
+  currentSpeakingId?: string | null;
 }
 
 export const MessageList: React.FC<MessageListProps> = ({
@@ -25,6 +28,9 @@ export const MessageList: React.FC<MessageListProps> = ({
   onRejectAction,
   onSelectSuggestedReply,
   onRetry,
+  onSpeakMessage,
+  onStopSpeech,
+  currentSpeakingId = null,
 }) => {
   const isAr = languageCode === 'ar';
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -68,7 +74,7 @@ export const MessageList: React.FC<MessageListProps> = ({
             {/* Bubble Container */}
             <div className={`max-w-[85%] sm:max-w-[75%] space-y-1.5 ${isUser ? 'items-end' : 'items-start'}`}>
               <div
-                className={`rounded-2xl px-4 py-3 text-xs sm:text-sm leading-relaxed shadow-md ${
+                className={`relative rounded-2xl px-4 py-3 text-xs sm:text-sm leading-relaxed shadow-md group ${
                   isUser
                     ? 'bg-[#D4AF37] text-[#02130D] font-bold rounded-tr-none'
                     : msg.error
@@ -76,7 +82,46 @@ export const MessageList: React.FC<MessageListProps> = ({
                     : 'bg-[#073D2F] text-[#F8F3E7] border border-[#D4AF37]/40 rounded-tl-none'
                 }`}
               >
+                {msg.imagePreview && (
+                  <div className="mb-2.5 rounded-xl overflow-hidden border border-[#02130D]/30 max-h-56 bg-black/40">
+                    <img src={msg.imagePreview} alt="Camera scan preview" className="w-full h-full object-cover" />
+                  </div>
+                )}
                 <p className="whitespace-pre-wrap">{msg.content}</p>
+
+                {/* Speaker Audio playback button for Arafat response */}
+                {!isUser && !msg.error && (
+                  <div className="flex items-center justify-end mt-2 pt-1 border-t border-[#D4AF37]/20">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (currentSpeakingId === msg.id) {
+                          onStopSpeech?.();
+                        } else {
+                          onSpeakMessage?.(msg.content, msg.id);
+                        }
+                      }}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold transition-all cursor-pointer ${
+                        currentSpeakingId === msg.id
+                          ? 'bg-amber-400 text-[#02130D] animate-pulse shadow-md'
+                          : 'bg-[#02130D]/60 hover:bg-[#D4AF37] hover:text-[#02130D] text-[#D4AF37] border border-[#D4AF37]/40'
+                      }`}
+                      title={isAr ? 'استمع للرد بصوت عرفات' : 'Listen to Arafat voice'}
+                    >
+                      {currentSpeakingId === msg.id ? (
+                        <>
+                          <VolumeX className="w-3.5 h-3.5" />
+                          <span>{isAr ? 'إيقاف الصوت' : 'Stop Audio'}</span>
+                        </>
+                      ) : (
+                        <>
+                          <Volume2 className="w-3.5 h-3.5" />
+                          <span>{isAr ? 'استمع بصوت عرفات' : 'Listen Voice'}</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
 
                 {/* Proposed Action Confirmation Card */}
                 {msg.proposedAction && (

@@ -36,6 +36,8 @@ export interface ChatMessage {
   proposedAction?: ProposedAction | null;
   status?: RequestStatus;
   suggestedReplies?: string[];
+  imagePreview?: string;
+  autoSpeak?: boolean;
   error?: boolean;
 }
 

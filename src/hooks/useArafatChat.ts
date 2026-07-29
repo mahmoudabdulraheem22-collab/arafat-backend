@@ -74,9 +74,12 @@ export function useArafatChat({
   }, []);
 
   const sendMessage = useCallback(
-    async (text: string) => {
+    async (text: string, options?: { image?: string; autoSpeak?: boolean }) => {
       const trimmedText = text.trim();
-      if (!trimmedText || isLoading) return;
+      const hasImage = Boolean(options?.image);
+      if ((!trimmedText && !hasImage) || isLoading) return;
+
+      const messageContent = trimmedText || (isAr ? 'قام الحاج بإرسال صورة ملتقطة بالكاميرا للتعرف البصري.' : 'Pilgrim sent camera photo for visual analysis.');
 
       // Abort any previous pending request
       if (abortControllerRef.current) {
@@ -90,7 +93,8 @@ export function useArafatChat({
       const newUserMessage: ChatMessage = {
         id: userMsgId,
         role: 'user',
-        content: trimmedText,
+        content: messageContent,
+        imagePreview: options?.image,
         timestamp: Date.now(),
       };
 
@@ -107,11 +111,12 @@ export function useArafatChat({
           },
           signal: controller.signal,
           body: JSON.stringify({
-            message: trimmedText,
+            message: messageContent,
             conversationId,
             language: languageCode,
             currency: currencyCode,
             userContext: currentUserContext,
+            image: options?.image || null,
           }),
         });
 
@@ -122,7 +127,7 @@ export function useArafatChat({
             headers: { 'Content-Type': 'application/json' },
             signal: controller.signal,
             body: JSON.stringify({
-              message: trimmedText,
+              message: messageContent,
               lang: languageCode,
             }),
           });
@@ -138,6 +143,7 @@ export function useArafatChat({
             role: 'assistant',
             content: legacyData.response || (isAr ? 'تم استلام استفسارك بنجاح.' : 'Your request was received.'),
             timestamp: Date.now(),
+            autoSpeak: options?.autoSpeak,
             suggestedReplies: isAr
               ? ['مناسك العمرة', 'حساب الميزانية', 'التحدث مع موظف']
               : ['Umrah rituals', 'Calculate budget', 'Talk to Human Agent'],
@@ -165,6 +171,7 @@ export function useArafatChat({
           requiresConfirmation: data.requiresConfirmation,
           proposedAction: data.proposedAction,
           status: data.requiresConfirmation ? 'pending' : undefined,
+          autoSpeak: options?.autoSpeak,
           suggestedReplies: data.suggestedReplies || [],
         };
 

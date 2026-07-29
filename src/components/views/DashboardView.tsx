@@ -78,6 +78,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   const quickActions = [
     {
+      id: 'rituals',
+      title: isAr ? '📸 الدليل البصري التوضيحي للمناسك' : '📸 Visual Illustrated Rituals Guide',
+      desc: isAr ? 'شرح مصور بالأيقونات والخطوات التوضيحية لمناسك الحج والعمرة' : 'Illustrated diagram & photo steps for Hajj & Umrah',
+      icon: Compass,
+      badge: isAr ? 'مُميّز' : 'Featured',
+    },
+    {
       id: 'trip_dashboard',
       title: isAr ? 'ملخص رحلة الحج (Trip Dashboard)' : 'Trip Summary Dashboard',
       desc: isAr ? 'حالة الوصول، تقدم الحملة والمجموعة، وجدول المواعيد' : 'Arrival status, group progress, & upcoming events',
